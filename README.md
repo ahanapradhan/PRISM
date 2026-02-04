@@ -52,7 +52,7 @@ Inside `unmasque`, you'll find the following subdirectories:
 
 #### src
 
-The `src` directory contains code `unmasque' code, extended with the notion of FIT-ness, and the full implementation of PRISM extractors.
+The `src` directory contains code `PRISM' code: which is `unmasque' core extended with the notion of FIT-ness, and the full implementation of PRISM extractors.
 #### test
 
 (obsolete) The `test` directory houses unit test cases for each extractor module. These tests are crucial for ensuring the reliability and correctness of the code.
@@ -78,10 +78,10 @@ config.ini --> This contains database login credentials and flags for optional f
 `options` section: extractor options. E.g. the maximum value for `LIMIT` clause is 1000. If the user needs to set a higher value, use `limit=value`.
 
 
-### Running Unmasque
+### Running PRISM
 Open `mysite/unmasque/src/main_cmd.py` file.  
 This script has one default input specified.  
-Change this query to try Unmasque for various inputs.  
+Change this query to try PRISM for various inputs.  
 `test.util` package has `queries.py` file, containing a few sample queries. Any of them can be used for testing.
 
 #### From Command Line:
