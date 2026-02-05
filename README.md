@@ -52,7 +52,7 @@ Inside `unmasque`, you'll find the following subdirectories:
 
 #### src
 
-The `src` directory contains code `PRISM' code: which is `unmasque' core extended with the notion of FIT-ness, and the full implementation of PRISM extractors.
+The `src` directory contains code `PRISM` code: which is `unmasque` core extended with the notion of FIT-ness, and the full implementation of PRISM extractors.
 #### test
 
 (obsolete) The `test` directory houses unit test cases for each extractor module. These tests are crucial for ensuring the reliability and correctness of the code.
