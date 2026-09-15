@@ -5,6 +5,7 @@ from .core.factory.PipeLineFactory import PipeLineFactory
 from .pipeline.abstract.SchemaSanitizer import SchemaSanitizer
 from .util.ConnectionFactory import ConnectionHelperFactory
 
+
 def signal_handler(signum, frame):
     print('You pressed Ctrl+C!')
     sigconn = ConnectionHelperFactory().createConnectionHelper()
@@ -27,200 +28,33 @@ class TestQuery:
         self.orf = orf if orf is not None else False
 
 def create_workload():
-    test_workload = [TestQuery("Buy", """SELECT * 
-FROM customer_buying_record
-WHERE 
-      (x1 = 1 OR y1 = 1)
-  AND (x2 = 1 OR y2 = 1)
-  AND (x3 = 1 OR y3 = 1)
-  AND (x4 = 1 OR y4 = 1)
-  AND (x5 = 1 OR y5 = 1)
-  AND (x6 = 1 OR y6 = 1)
-  AND (x7 = 1 OR y7 = 1)
-  AND (x8 = 1 OR y8 = 1)
-  AND (x9 = 1 OR y9 = 1)
-  AND (x10 = 1 OR y10 = 1)
-  AND (x11 = 1 OR y11 = 1)
-  AND (x12 = 1 OR y12 = 1)
-  AND (x13 = 1 OR y13 = 1)
-  AND (x14 = 1 OR y14 = 1)
-  AND (x15 = 1 OR y15 = 1)
-  AND (x16 = 1 OR y16 = 1)
-  AND (x17 = 1 OR y17 = 1)
-  AND (x18 = 1 OR y18 = 1)
-  AND (x19 = 1 OR y19 = 1)
-  AND (x20 = 1 OR y20 = 1)
-  AND (x21 = 1 OR y21 = 1)
-  AND (x22 = 1 OR y22 = 1)
-  AND (x23 = 1 OR y23 = 1)
-  AND (x24 = 1 OR y24 = 1)
-  AND (x25 = 1 OR y25 = 1)
-  AND (x26 = 1 OR y26 = 1)
-  AND (x27 = 1 OR y27 = 1)
-  AND (x28 = 1 OR y28 = 1)
-  AND (x29 = 1 OR y29 = 1)
-  AND (x30 = 1 OR y30 = 1);""", False, False, False, False, True),
-
-
-                     TestQuery("Anantha-Q2", """SELECT *
-FROM variable_assignments
-WHERE 
-   (var1_val = 0 AND var2_val = 0 AND var3_val = 0 AND var4_val = 1 AND   var5_val = 1 AND var6_val = 0 AND var7_val = 0 AND var8_val = 0 AND var9_val = 0 AND var10_val = 0)
-OR (var1_val = 0 AND var2_val = 1 AND var3_val = 0 AND var4_val = 0 AND var5_val = 1 AND var6_val = 1 AND var7_val = 0 AND var8_val = 1 AND var9_val = 0 AND var10_val = 1)
-OR (var1_val = 1 AND var2_val = 0 AND var3_val = 1 AND var4_val = 1 AND var5_val = 0 AND var6_val = 0 AND var7_val = 1 AND var8_val = 0 AND var9_val = 1 AND var10_val = 0)
-OR (var1_val = 1 AND var2_val = 1 AND var3_val = 1 AND var4_val = 0 AND var5_val = 0 AND var6_val = 1 AND var7_val = 1 AND var8_val = 1 AND var9_val = 1 AND var10_val = 1)
-;""", False, False, False, False, True),
-
-                     TestQuery("Anantha-Q1", """SELECT *
-    FROM variable_assignments
-    WHERE 
-  (
-    (var1_val = 0 AND var2_val = 0 AND var3_val = 0 AND var4_val = 1)
-    OR (var1_val = 0 AND var2_val = 0 AND var3_val = 1 AND var4_val = 0)
-    OR (var1_val = 0 AND var2_val = 1 AND var3_val = 0 AND var4_val = 0)
-    OR (var1_val = 0 AND var2_val = 1 AND var3_val = 1 AND var4_val = 1)
-    OR (var1_val = 1 AND var2_val = 0 AND var3_val = 0 AND var4_val = 0)
-    OR (var1_val = 1 AND var2_val = 0 AND var3_val = 1 AND var4_val = 1)
-    OR (var1_val = 1 AND var2_val = 1 AND var3_val = 0 AND var4_val = 1)
-    OR (var1_val = 1 AND var2_val = 1 AND var3_val = 1 AND var4_val = 0)
-  )
-
-  AND (
-    (var2_val = 0 AND var3_val = 0 AND var4_val = 0 AND var5_val = 0)
-    OR (var2_val = 0 AND var3_val = 0 AND var4_val = 1 AND var5_val = 1)
-    OR (var2_val = 0 AND var3_val = 1 AND var4_val = 0 AND var5_val = 1)
-    OR (var2_val = 0 AND var3_val = 1 AND var4_val = 1 AND var5_val = 0)
-    OR (var2_val = 1 AND var3_val = 0 AND var4_val = 0 AND var5_val = 1)
-    OR (var2_val = 1 AND var3_val = 0 AND var4_val = 1 AND var5_val = 0)
-    OR (var2_val = 1 AND var3_val = 1 AND var4_val = 0 AND var5_val = 0)
-    OR (var2_val = 1 AND var3_val = 1 AND var4_val = 1 AND var5_val = 1)
-  )
-
-  AND (
-    (var3_val = 0 AND var4_val = 0 AND var5_val = 0 AND var6_val = 0)
-    OR (var3_val = 0 AND var4_val = 0 AND var5_val = 1 AND var6_val = 1)
-    OR (var3_val = 0 AND var4_val = 1 AND var5_val = 0 AND var6_val = 1)
-    OR (var3_val = 0 AND var4_val = 1 AND var5_val = 1 AND var6_val = 0)
-    OR (var3_val = 1 AND var4_val = 0 AND var5_val = 0 AND var6_val = 1)
-    OR (var3_val = 1 AND var4_val = 0 AND var5_val = 1 AND var6_val = 0)
-    OR (var3_val = 1 AND var4_val = 1 AND var5_val = 0 AND var6_val = 0)
-    OR (var3_val = 1 AND var4_val = 1 AND var5_val = 1 AND var6_val = 1)
-  )
-
-  AND (
-    (var4_val = 0 AND var5_val = 0 AND var6_val = 0 AND var7_val = 0)
-    OR (var4_val = 0 AND var5_val = 0 AND var6_val = 1 AND var7_val = 1)
-    OR (var4_val = 0 AND var5_val = 1 AND var6_val = 0 AND var7_val = 1)
-    OR (var4_val = 0 AND var5_val = 1 AND var6_val = 1 AND var7_val = 0)
-    OR (var4_val = 1 AND var5_val = 0 AND var6_val = 0 AND var7_val = 1)
-    OR (var4_val = 1 AND var5_val = 0 AND var6_val = 1 AND var7_val = 0)
-    OR (var4_val = 1 AND var5_val = 1 AND var6_val = 0 AND var7_val = 0)
-    OR (var4_val = 1 AND var5_val = 1 AND var6_val = 1 AND var7_val = 1)
-  )
-
-  AND (
-    (var5_val = 0 AND var6_val = 0 AND var7_val = 0 AND var8_val = 1)
-    OR (var5_val = 0 AND var6_val = 0 AND var7_val = 1 AND var8_val = 0)
-    OR (var5_val = 0 AND var6_val = 1 AND var7_val = 0 AND var8_val = 0)
-    OR (var5_val = 0 AND var6_val = 1 AND var7_val = 1 AND var8_val = 1)
-    OR (var5_val = 1 AND var6_val = 0 AND var7_val = 0 AND var8_val = 0)
-    OR (var5_val = 1 AND var6_val = 0 AND var7_val = 1 AND var8_val = 1)
-    OR (var5_val = 1 AND var6_val = 1 AND var7_val = 0 AND var8_val = 1)
-    OR (var5_val = 1 AND var6_val = 1 AND var7_val = 1 AND var8_val = 0)
-  )
-
-  AND (
-    (var6_val = 0 AND var7_val = 0 AND var8_val = 0 AND var9_val = 0)
-    OR (var6_val = 0 AND var7_val = 0 AND var8_val = 1 AND var9_val = 1)
-    OR (var6_val = 0 AND var7_val = 1 AND var8_val = 0 AND var9_val = 1)
-    OR (var6_val = 0 AND var7_val = 1 AND var8_val = 1 AND var9_val = 0)
-    OR (var6_val = 1 AND var7_val = 0 AND var8_val = 0 AND var9_val = 1)
-    OR (var6_val = 1 AND var7_val = 0 AND var8_val = 1 AND var9_val = 0)
-    OR (var6_val = 1 AND var7_val = 1 AND var8_val = 0 AND var9_val = 0)
-    OR (var6_val = 1 AND var7_val = 1 AND var8_val = 1 AND var9_val = 1)
-  )
-
-  AND (
-    (var7_val = 0 AND var8_val = 0 AND var9_val = 0 AND var10_val = 0)
-    OR (var7_val = 0 AND var8_val = 0 AND var9_val = 1 AND var10_val = 1)
-    OR (var7_val = 0 AND var8_val = 1 AND var9_val = 0 AND var10_val = 1)
-    OR (var7_val = 0 AND var8_val = 1 AND var9_val = 1 AND var10_val = 0)
-    OR (var7_val = 1 AND var8_val = 0 AND var9_val = 0 AND var10_val = 1)
-    OR (var7_val = 1 AND var8_val = 0 AND var9_val = 1 AND var10_val = 0)
-    OR (var7_val = 1 AND var8_val = 1 AND var9_val = 0 AND var10_val = 0)
-    OR (var7_val = 1 AND var8_val = 1 AND var9_val = 1 AND var10_val = 1)
-  )
-
-  AND (
-    (var8_val = 0 AND var9_val = 0 AND var10_val = 0 AND var1_val = 0)
-    OR (var8_val = 0 AND var9_val = 0 AND var10_val = 1 AND var1_val = 1)
-    OR (var8_val = 0 AND var9_val = 1 AND var10_val = 0 AND var1_val = 1)
-    OR (var8_val = 0 AND var9_val = 1 AND var10_val = 1 AND var1_val = 0)
-    OR (var8_val = 1 AND var9_val = 0 AND var10_val = 0 AND var1_val = 1)
-    OR (var8_val = 1 AND var9_val = 0 AND var10_val = 1 AND var1_val = 0)
-    OR (var8_val = 1 AND var9_val = 1 AND var10_val = 0 AND var1_val = 0)
-    OR (var8_val = 1 AND var9_val = 1 AND var10_val = 1 AND var1_val = 1)
-  )
-
-
-  AND (
-    (var9_val = 0 AND var10_val = 0 AND var1_val = 0 AND var2_val = 0)
-    OR (var9_val = 0 AND var10_val = 0 AND var1_val = 1 AND var2_val = 1)
-    OR (var9_val = 0 AND var10_val = 1 AND var1_val = 0 AND var2_val = 1)
-    OR (var9_val = 0 AND var10_val = 1 AND var1_val = 1 AND var2_val = 0)
-    OR (var9_val = 1 AND var10_val = 0 AND var1_val = 0 AND var2_val = 1)
-    OR (var9_val = 1 AND var10_val = 0 AND var1_val = 1 AND var2_val = 0)
-    OR (var9_val = 1 AND var10_val = 1 AND var1_val = 0 AND var2_val = 0)
-    OR (var9_val = 1 AND var10_val = 1 AND var1_val = 1 AND var2_val = 1)
-  )
-
-
-  AND (
-    (var10_val = 0 AND var1_val = 0 AND var2_val = 0 AND var3_val = 0)
-    OR (var10_val = 0 AND var1_val = 0 AND var2_val = 1 AND var3_val = 1)
-    OR (var10_val = 0 AND var1_val = 1 AND var2_val = 0 AND var3_val = 1)
-    OR (var10_val = 0 AND var1_val = 1 AND var2_val = 1 AND var3_val = 0)
-    OR (var10_val = 1 AND var1_val = 0 AND var2_val = 0 AND var3_val = 1)
-    OR (var10_val = 1 AND var1_val = 0 AND var2_val = 1 AND var3_val = 0)
-    OR (var10_val = 1 AND var1_val = 1 AND var2_val = 0 AND var3_val = 0)
-    OR (var10_val = 1 AND var1_val = 1 AND var2_val = 1 AND var3_val = 1)
-  );""",
-                               False, False, False, False, True),
-                     TestQuery("Customer", """SELECT * 
-FROM customer_buying_record
-WHERE 
-      (x1 = 1 OR y1 = 1)
-  AND (x2 = 1 OR y2 = 1)
-  AND (x3 = 1 OR y3 = 1)
-  AND (x4 = 1 OR y4 = 1)
-  AND (x5 = 1 OR y5 = 1)
-  AND (x6 = 1 OR y6 = 1)
-  AND (x7 = 1 OR y7 = 1)
-  AND (x8 = 1 OR y8 = 1)
-  AND (x9 = 1 OR y9 = 1)
-  AND (x10 = 1 OR y10 = 1)
-  AND (x11 = 1 OR y11 = 1)
-  AND (x12 = 1 OR y12 = 1)
-  AND (x13 = 1 OR y13 = 1)
-  AND (x14 = 1 OR y14 = 1)
-  AND (x15 = 1 OR y15 = 1)
-  AND (x16 = 1 OR y16 = 1)
-  AND (x17 = 1 OR y17 = 1)
-  AND (x18 = 1 OR y18 = 1)
-  AND (x19 = 1 OR y19 = 1)
-  AND (x20 = 1 OR y20 = 1)
-  AND (x21 = 1 OR y21 = 1)
-  AND (x22 = 1 OR y22 = 1)
-  AND (x23 = 1 OR y23 = 1)
-  AND (x24 = 1 OR y24 = 1)
-  AND (x25 = 1 OR y25 = 1)
-  AND (x26 = 1 OR y26 = 1)
-  AND (x27 = 1 OR y27 = 1)
-  AND (x28 = 1 OR y28 = 1)
-  AND (x29 = 1 OR y29 = 1)
-  AND (x30 = 1 OR y30 = 1);""", False, False, False, False, True)
-
-                     ]
+    test_workload = [TestQuery("Q1",  """SELECT cn.name AS producing_company,
+       miidx.info AS rating,
+       t.title AS movie
+FROM company_name AS cn,
+     company_type AS ct,
+     info_type AS it,
+     kind_type AS kt,
+     movie_companies AS mc,
+     movie_info AS mi,
+     movie_info_idx AS miidx,
+     title AS t
+WHERE cn.country_code = '[us]'
+  AND ct.kind = 'production companies'
+  AND it.info = 'rating'
+  AND kt.kind = 'movie'
+  AND mi.movie_id = t.id
+  AND kt.id = t.kind_id
+  AND mc.movie_id = t.id
+  AND cn.id = mc.company_id
+  AND ct.id = mc.company_type_id
+  AND miidx.movie_id = t.id
+  AND it.id = miidx.info_type_id
+  AND mi.movie_id = miidx.movie_id
+  AND mi.movie_id = mc.movie_id
+  AND miidx.movie_id = mc.movie_id;
+    """, False, False, False, False),
+ ]
     return test_workload
 
 
@@ -234,7 +68,7 @@ if __name__ == '__main__':
 
     # print(workload_dict)
 
-    qid = "Anantha-Q1" #sys.argv[1]
+    qid = "Q1" #sys.argv[1]
     hq = workload[workload_dict[qid]]
     query = hq.query
     conn = ConnectionHelperFactory().createConnectionHelper()

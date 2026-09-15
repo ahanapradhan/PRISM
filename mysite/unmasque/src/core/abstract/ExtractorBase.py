@@ -5,7 +5,7 @@ from ...util.error_handling import UnmasqueError
 from ...util.constants import OK
 from ....src.core.abstract.abstractConnection import AbstractConnectionHelper
 from ....src.pipeline.abstract.SchemaSanitizer import SchemaSanitizer
-from ....src.util.Log import Log, BOOLEAN_RELATED, create_logger
+from ....src.util.Log import Log, LOGGING_REQ, create_logger
 
 
 class Base(SchemaSanitizer):

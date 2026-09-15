@@ -27,10 +27,7 @@ EXTRACTOR_NAMES = {"Executable",
                    "Equi_Join",
                    "InequalityPredicate"}
 
-BOOLEAN_RELATED = {"Extraction PipeLine",
-"Base Pipeline", "ExtractionPipeLine",
-"BasePipeLine", "DisjunctionPipeLine",
-"DisjunctionPipeLine PipeLine"}
+LOGGING_REQ = EXTRACTOR_NAMES
 
 def get_format_args(msg, args):
     f_msg = format(str(msg))
@@ -43,7 +40,7 @@ def get_format_args(msg, args):
     return f_msg, f_args
 
 def create_logger(name="", level=""):
-    if name in BOOLEAN_RELATED:
+    if name in LOGGING_REQ:
         return Log(name, level)
     return Log()
 
