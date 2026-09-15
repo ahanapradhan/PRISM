@@ -82,7 +82,33 @@ WHERE cn.country_code = '[us]'
    AND k.id = mk.keyword_id
    AND it1.id = mi.info_type_id
    AND cn.id = mc.company_id
-   AND ct.id = mc.company_type_id;""", False, False, False, False)
+   AND ct.id = mc.company_type_id;""", False, False, False, False),
+                     TestQuery("Q13d", """SELECT cn.name AS producing_company,
+       miidx.info AS rating,
+       t.title AS movie
+FROM company_name AS cn,
+     company_type AS ct,
+     info_type AS it,
+     kind_type AS kt,
+     movie_companies AS mc,
+     movie_info AS mi,
+     movie_info_idx AS miidx,
+     title AS t
+WHERE cn.country_code = '[us]'
+  AND ct.kind = 'production companies'
+  AND it.info = 'rating'
+  AND kt.kind = 'movie'
+  AND mi.movie_id = t.id
+  AND kt.id = t.kind_id
+  AND mc.movie_id = t.id
+  AND cn.id = mc.company_id
+  AND ct.id = mc.company_type_id
+  AND miidx.movie_id = t.id
+  AND it.id = miidx.info_type_id
+  AND mi.movie_id = miidx.movie_id
+  AND mi.movie_id = mc.movie_id
+  AND miidx.movie_id = mc.movie_id;
+    """, False, False, False, False)
 
  ]
     return test_workload
@@ -99,7 +125,7 @@ if __name__ == '__main__':
     # print(workload_dict)
 
 
-    qid = "Q15d" #sys.argv[1]
+    qid = "Q13d" #sys.argv[1]
     hq = workload[workload_dict[qid]]
     query = hq.query
     conn = ConnectionHelperFactory().createConnectionHelper()
