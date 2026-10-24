@@ -1,3 +1,35 @@
+# Extractable Query Class:
+---------------------------------------------------------------------------------------
+
+query      ::= flat | branch (union_op branch)+
+branch     ::= "(" flat ")"
+union_op   ::= UNION | UNION ALL
+
+flat       ::= SELECT list(item) FROM source
+               [WHERE condition] [GROUP BY list(column)]
+               [ORDER BY list(order_item)] [LIMIT int]
+
+item       ::= expression [AS identifier]
+expression ::= scalar | aggregate "(" scalar ")" | COUNT(*)
+aggregate  ::= SUM | AVG | MIN | MAX | COUNT
+scalar     ::= column | constant | "(" scalar ")"
+             | scalar arithmetic scalar
+arithmetic ::= "+" | "-" | "*" | "/"
+
+source     ::= list(table) | table (join_op table ON condition)+
+join_op    ::= JOIN | INNER JOIN | LEFT OUTER JOIN
+             | RIGHT OUTER JOIN | FULL OUTER JOIN
+
+condition  ::= conjunct (AND conjunct)*
+conjunct   ::= atom (OR atom)* | column IN "(" list(constant) ")"
+             | column <> constant | column NOT LIKE string
+atom       ::= column comparison (column | constant)
+             | column LIKE string
+comparison ::= "=" | "<" | "<=" | ">" | ">="
+
+order_item ::= (identifier | column) [ASC | DESC]
+column     ::= identifier ["." identifier]
+constant   ::= number | date | string
 
 # Setting up the PRISM Code:
 -------------------------------------------------------------------------------------------------------------------------------------------------
