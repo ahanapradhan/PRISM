@@ -3,7 +3,7 @@
 
 query      ::= flat | branch (union_op branch)+
 branch     ::= "(" flat ")"
-union_op   ::= UNION | UNION ALL
+union_op   ::= UNION ALL
 
 flat       ::= SELECT list(item) FROM source
                [WHERE condition] [GROUP BY list(column)]
