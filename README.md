@@ -31,7 +31,6 @@ order_item ::= (identifier | column) [ASC | DESC]
 column     ::= identifier ["." identifier]
 constant   ::= number | date | string
 
-# Observability Conditions for Extractability:
 ------------------------------------------------------------------------------
 
 ## Observability Conditions
