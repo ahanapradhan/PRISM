@@ -1,0 +1,4 @@
+Hibernate: select * from hq_1(?)
+Hibernate: select * from hq_2(?)
+Hibernate: select * from hq_4(?, ?, ?)
+Hibernate: select * from hq_3(?)
