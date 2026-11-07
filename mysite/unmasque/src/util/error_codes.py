@@ -6,3 +6,4 @@ ERROR_004 = {'code': "004", 'msg': "Dummy value not found."}
 ERROR_005 = {'code': "005", 'msg': "Unsupported datatype"}
 ERROR_006 = {'code': "006", 'msg': "Relation not listed in pk-fk file"}
 ERROR_007 = {'code': "007", 'msg': "Out of Scope Problem"}
+ERROR_008 = {'code': "008", 'msg': "Disjunction extraction did not converge"}

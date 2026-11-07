@@ -1,4 +1,7 @@
+import csv
 import math
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
@@ -8,11 +11,11 @@ from matplotlib.lines import Line2D
 plt.rcParams.update({
     "font.family": "sans-serif",
     "font.sans-serif": ["Helvetica", "Liberation Sans", "Arial"],
-    "font.size": 16,
-    "axes.labelsize": 22,
+    "font.size": 20,
+    "axes.labelsize": 24,
     "xtick.labelsize": 16,
     "ytick.labelsize": 18,
-    "legend.fontsize": 17,
+    "legend.fontsize": 19,
     "axes.linewidth": 1.25,
     "xtick.major.width": 1.0,
     "ytick.major.width": 1.0,
@@ -23,7 +26,6 @@ plt.rcParams.update({
 })
 
 # All timing values are elapsed wall-clock minutes from query_results.md.
-# PRISM entries are entered in seconds and converted to minutes; None is plotted as NA.
 QUERY_ORDER = [
     "DS1", "DS2", "DS3",
     "NEP1_a", "NEP2_a", "NEP3_a",
@@ -31,12 +33,29 @@ QUERY_ORDER = [
     "UK3", "UK_a", "UN3", "UN_a",
 ]
 
-PRISM_DATA = {
-    "DS1": {"prism_basic": 0.58/60.0, "prism": 0.66/60.0},
-    "OJ1": {"prism_basic": 0.63 / 60.0, "prism": 0.85 / 60.0},
-    "OJ2": {"prism_basic": 0.90 / 60.0, "prism": 0.80 / 60.0},
-    "OJ3": {"prism_basic": 0.88 / 60.0, "prism": 0.94 / 60.0},
-}
+# PRISM timings come from the UNMASQUE CSVs (seconds, per-component).
+#   unmasque_all_flags.csv      -> PRISM
+#   unmasque_specific_flags.csv -> PRISM_basic
+# Total = sum of component times, EXCLUDING limit_s and result_comparator_s
+# (and the precomputed total_s column). Converted to minutes.
+EXCLUDED_COLS = {"qid", "limit_s", "result_comparator_s", "total_s"}
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def load_unmasque_totals(path):
+    totals = {}
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            secs = sum(float(v) for k, v in row.items()
+                       if k not in EXCLUDED_COLS and v not in (None, ""))
+            totals[row["qid"]] = secs / 60.0
+    return totals
+
+
+_basic = load_unmasque_totals(os.path.join(HERE, "unmasque_specific_flags.csv"))
+_full = load_unmasque_totals(os.path.join(HERE, "unmasque_all_flags.csv"))
+PRISM_DATA = {q: {"prism_basic": _basic.get(q), "prism": _full.get(q)}
+              for q in QUERY_ORDER}
 
 # A completed candidate has a numeric time and correctness True/False/None.
 # A stopped or failed run has time=None and status="TO".
@@ -193,7 +212,7 @@ def draw_prism(ax, x, width, value, color):
     if value is None or (isinstance(value, float) and math.isnan(value)):
         draw_missing(ax, x, "NA", "#777777")
         return
-    ax.bar([x], [value], width, color=color, edgecolor="black", linewidth=0.45, zorder=3)
+    ax.bar([x], [value], width, color=color, edgecolor="none", linewidth=0.45, zorder=3)
 
 
 def plot_comparison(output_stem="prism_vs_cubes_all_qids"):
@@ -248,12 +267,10 @@ def plot_comparison(output_stem="prism_vs_cubes_all_qids"):
               label="CUBES incorrect"),
     ], loc="upper right", bbox_to_anchor=(0.995, 0.80), frameon=False, fontsize=13)
 
-
     # Gnuplot-like clean frame.
     for spine in ax.spines.values():
         spine.set_color("black")
         spine.set_linewidth(1.25)
-
 
     fig.subplots_adjust(left=0.075, right=0.992, top=0.985, bottom=0.155)
     fig.savefig(output_stem + ".png", dpi=300, bbox_inches="tight")

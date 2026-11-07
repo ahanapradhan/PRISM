@@ -15,6 +15,8 @@ from ....src.util.constants import FILTER, INEQUALITY, DONE, RUNNING, START, EQU
     SAMPLING, RESTORE_DB, ERROR
 from ....src.util.utils import get_format, get_val_plus_delta
 from ....src.util.error_handling import UnmasqueError
+from ....src.util.error_codes import ERROR_008
+from ....src.pipeline.abstract.SchemaSanitizer import SchemaSanitizer
 
 
 def get_eq_filters(arithmetics):
@@ -31,6 +33,7 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         self.db_restorer = None
         self.global_min_instance_dict = None
         self.key_lists = None
+        self.OR_CUTOFF = 1000
 
     def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None):
         self.update_state(RESTORE_DB + START)
@@ -181,6 +184,11 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         if self.connectionHelper.config.detect_or:
             try:
                 time_profile = self.__run_extraction_loop(all_eq_predicates, core_relations, ids, query, time_profile)
+            except UnmasqueError as e:
+                self.__restore_db(core_relations)
+                self.update_state(ERROR)
+                self.logger.error("Error in disjunction loop. ", str(e))
+                raise
             except Exception as e:
                 self.update_state(ERROR)
                 self.logger.error("Error in disjunction loop. ", str(e))
@@ -189,9 +197,11 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         return True, time_profile
 
     def __run_extraction_loop(self, all_eq_predicates, core_relations, ids, query, time_profile):
-        while True:
+        converged = False
+        for _ in range(self.OR_CUTOFF):
             or_eq_predicates = []
             for i in ids:
+                reference = all_eq_predicates[0][i]
                 in_candidates = [copy.deepcopy(em[i]) for em in all_eq_predicates]
                 self.logger.debug("Checking OR predicate of ", in_candidates)
                 if not len(in_candidates[-1]):
@@ -203,13 +213,87 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
                 check, time_profile = self._mutation_pipeline(core_relations, query, time_profile, restore_details)
                 if not check or not self.__get_predicates_in_action():
                     or_eq_predicates.append(tuple())
+                    continue
+                new_predicate = self.__find_matching_predicate(self.__get_predicates_in_action(), reference)
+                if not new_predicate or not self.__is_new_disjunct(new_predicate, in_candidates):
+                    or_eq_predicates.append(tuple())
                 else:
-                    or_eq_predicates.append(self.__get_predicates_in_action()[i])
+                    or_eq_predicates.append(new_predicate)
                 self.logger.debug("new or predicates...", all_eq_predicates, or_eq_predicates)
             if all(element == tuple() for element in or_eq_predicates):
+                converged = True
                 break
             all_eq_predicates.append(or_eq_predicates)
+        if not converged:
+            raise UnmasqueError(ERROR_008, "DisjunctionPipeLine",
+                                f"Could not determine all OR branches within {self.OR_CUTOFF} iterations.")
         return time_profile
+
+    @staticmethod
+    def __find_matching_predicate(predicates, reference):
+        if not reference:
+            return tuple()
+        ref_key = (reference[0], reference[1])
+        candidates = [pred for pred in predicates if (pred[0], pred[1]) == ref_key]
+        if not candidates:
+            return tuple()
+        for pred in candidates:
+            if len(pred) > 4 and len(reference) > 4 \
+                    and pred[2] == reference[2] and pred[3] == reference[3] and pred[4] == reference[4]:
+                return pred
+        for pred in candidates:
+            if len(pred) > 2 and pred[2] == reference[2]:
+                return pred
+        return candidates[0]
+
+    @staticmethod
+    def __get_interval(predicate):
+        if not predicate or len(predicate) < 5:
+            return None
+        if str(predicate[2]).lower() == 'like':
+            return None
+        return predicate[3], predicate[4]
+
+    @staticmethod
+    def __intervals_overlap(first, second):
+        first_lb, first_ub = first
+        second_lb, second_ub = second
+        try:
+            if first_ub is not None and second_lb is not None and first_ub < second_lb:
+                return False
+            if second_ub is not None and first_lb is not None and second_ub < first_lb:
+                return False
+        except TypeError:
+            return True
+        return True
+
+    def __is_new_disjunct(self, new_predicate, in_candidates):
+        new_interval = self.__get_interval(new_predicate)
+        for candidate in in_candidates:
+            if not candidate or (candidate[0], candidate[1]) != (new_predicate[0], new_predicate[1]):
+                continue
+            candidate_interval = self.__get_interval(candidate)
+            if new_interval is None or candidate_interval is None:
+                if new_predicate == candidate:
+                    return False
+                continue
+            if self.__intervals_overlap(new_interval, candidate_interval):
+                return False
+        return True
+
+    def __restore_db(self, core_relations):
+        relations = getattr(self, 'all_relations', None) or core_relations
+        try:
+            self.connectionHelper.rollback_transaction()
+        except Exception:
+            pass
+        try:
+            sanitizer = SchemaSanitizer(self.connectionHelper, self.all_sizes)
+            sanitizer.set_all_relations(list(relations))
+            sanitizer.sanitize()
+            self.logger.info("Database restored after disjunction extraction error.")
+        except Exception as e:
+            self.logger.error("Could not restore the database after disjunction extraction error. ", str(e))
 
     def __get_OR_db_restoration_details(self, core_relations, in_candidates):
         restore_details = []
