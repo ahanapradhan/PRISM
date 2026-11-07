@@ -1,6 +1,6 @@
 # Reverse-engineering the closed Hibernate report
 
-## Executive summary
+## Summary
 
 The evidence is insufficient to recover the application exactly because the four PostgreSQL functions and their bound parameters are hidden. The SQL below is therefore a **best-behavioral guess**, not a proof of equivalence.
 
