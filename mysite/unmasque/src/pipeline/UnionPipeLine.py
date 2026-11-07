@@ -2,6 +2,7 @@ import datetime
 import time
 
 from .OuterJoinPipeLine import OuterJoinPipeLine
+from .abstract.SchemaSanitizer import SchemaSanitizer
 from ..core.union import Union
 from ..util.constants import UNION, START, DONE, RUNNING, WRONG, FROM_CLAUSE, ERROR
 
@@ -44,6 +45,7 @@ class UnionPipeLine(OuterJoinPipeLine):
             self.__nullify_relations(nullify)
             eq = self._after_from_clause_extract(query, core_relations)
             self.__revert_nullifications(nullify)
+            self.__restore_core_relations(core_relations)
             self.q_generator.reset()
             self.connectionHelper.closeConnection()
 
@@ -103,3 +105,12 @@ class UnionPipeLine(OuterJoinPipeLine):
             self.connectionHelper.commit_transaction()
             self.all_sizes[tab] = self.connectionHelper.execute_sql_fetchone_0(
                 self.connectionHelper.queries.get_row_count(f_tab), self.logger)
+
+    def __restore_core_relations(self, relations):
+        sanitizer = SchemaSanitizer(self.connectionHelper, self.all_sizes)
+        sanitizer.set_all_relations(list(relations))
+        sanitizer.sanitize()
+        for tab in relations:
+            self.all_sizes[tab] = self.connectionHelper.execute_sql_fetchone_0(
+                self.connectionHelper.queries.get_row_count(
+                    sanitizer.get_fully_qualified_table_name(tab)), self.logger)

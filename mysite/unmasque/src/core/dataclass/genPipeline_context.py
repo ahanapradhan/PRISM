@@ -319,7 +319,14 @@ class GenPipelineContext:
                         values.append((i_min, i_max))
                 self.__adjust_for_in_predicates(attrib, tab, values)
             else:
-                raise UnmasqueError(ERROR_007, "genPipeline_context", "Disjunction on Multiple Attributes are out of scope!")
+                details = {
+                    "column": p,
+                    "tab_attribs": tab_attribs,
+                    "unique_tab_attribs": sorted(uniq_tab_attribs),
+                }
+                raise UnmasqueError(
+                    ERROR_007, "genPipeline_context",
+                    f"Disjunction on Multiple Attributes are out of scope! Details: {details}")
 
     def __adjust_for_in_predicates(self, attrib, tab, _values):
         values = []

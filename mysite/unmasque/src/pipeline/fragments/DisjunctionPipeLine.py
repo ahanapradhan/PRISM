@@ -178,12 +178,10 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
 
     def _extract_disjunction(self, init_predicates, core_relations, query, time_profile):  # for once
         self.or_predicates = []
-        curr_eq_predicates = copy.deepcopy(init_predicates)
-        all_eq_predicates = [curr_eq_predicates]
-        ids = list(range(len(curr_eq_predicates)))
+        columns = self.__make_disjunction_columns(init_predicates)
         if self.connectionHelper.config.detect_or:
             try:
-                time_profile = self.__run_extraction_loop(all_eq_predicates, core_relations, ids, query, time_profile)
+                time_profile = self.__run_extraction_loop(columns, core_relations, query, time_profile)
             except UnmasqueError as e:
                 self.__restore_db(core_relations)
                 self.update_state(ERROR)
@@ -193,37 +191,66 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
                 self.update_state(ERROR)
                 self.logger.error("Error in disjunction loop. ", str(e))
                 return False, time_profile
-        self.or_predicates = list(zip(*all_eq_predicates))
+        self.or_predicates = [tuple(column) for column in columns.values()]
         return True, time_profile
 
-    def __run_extraction_loop(self, all_eq_predicates, core_relations, ids, query, time_profile):
+    @staticmethod
+    def __make_disjunction_columns(init_predicates):
+        columns = {}
+        occurrences = {}
+        for pred in init_predicates:
+            tab_attrib = (pred[0], pred[1])
+            occurrence = occurrences.get(tab_attrib, 0)
+            occurrences[tab_attrib] = occurrence + 1
+            columns[(pred[0], pred[1], occurrence)] = [copy.deepcopy(pred)]
+        return columns
+
+    @staticmethod
+    def __get_new_attribute_columns(predicates, known_tab_attribs, core_relations):
+        discovered = []
+        for pred in predicates:
+            if not pred or len(pred) < 3:
+                continue
+            tab_attrib = (pred[0], pred[1])
+            if tab_attrib in known_tab_attribs or pred[0] not in core_relations:
+                continue
+            known_tab_attribs.add(tab_attrib)
+            discovered.append(((pred[0], pred[1], 0), copy.deepcopy(pred)))
+        return discovered
+
+    def __run_extraction_loop(self, columns, core_relations, query, time_profile):
         converged = False
         for _ in range(self.OR_CUTOFF):
-            or_eq_predicates = []
-            for i in ids:
-                reference = all_eq_predicates[0][i]
-                in_candidates = [copy.deepcopy(em[i]) for em in all_eq_predicates]
+            additions = {}
+            added_new_column = False
+            known_tab_attribs = {(key[0], key[1]) for key in columns}
+            for key, column in list(columns.items()):
+                reference = column[0]
+                in_candidates = copy.deepcopy(column)
                 self.logger.debug("Checking OR predicate of ", in_candidates)
                 if not len(in_candidates[-1]):
-                    or_eq_predicates.append(tuple())
                     continue
 
                 restore_details = self.__get_OR_db_restoration_details(core_relations, in_candidates)
                 self.logger.debug(restore_details)
                 check, time_profile = self._mutation_pipeline(core_relations, query, time_profile, restore_details)
                 if not check or not self.__get_predicates_in_action():
-                    or_eq_predicates.append(tuple())
                     continue
-                new_predicate = self.__find_matching_predicate(self.__get_predicates_in_action(), reference)
-                if not new_predicate or not self.__is_new_disjunct(new_predicate, in_candidates):
-                    or_eq_predicates.append(tuple())
-                else:
-                    or_eq_predicates.append(new_predicate)
-                self.logger.debug("new or predicates...", all_eq_predicates, or_eq_predicates)
-            if all(element == tuple() for element in or_eq_predicates):
+                action_predicates = self.__get_predicates_in_action()
+                new_predicate = self.__find_matching_predicate(action_predicates, reference)
+                if new_predicate and self.__is_new_disjunct(new_predicate, in_candidates):
+                    additions[key] = new_predicate
+                for new_key, new_predicate in self.__get_new_attribute_columns(
+                        action_predicates, known_tab_attribs, core_relations):
+                    if new_key not in columns:
+                        columns[new_key] = [new_predicate]
+                        added_new_column = True
+                self.logger.debug("new or predicates...", columns, additions)
+            if not additions and not added_new_column:
                 converged = True
                 break
-            all_eq_predicates.append(or_eq_predicates)
+            for key, new_predicate in additions.items():
+                columns[key].append(new_predicate)
         if not converged:
             raise UnmasqueError(ERROR_008, "DisjunctionPipeLine",
                                 f"Could not determine all OR branches within {self.OR_CUTOFF} iterations.")
