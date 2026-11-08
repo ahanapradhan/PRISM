@@ -60,16 +60,6 @@ class OracleConnectionHelper(AbstractConnectionHelper):
             cur.execute(query)
         cur.close()
 
-    def cus_execute_sql_many(self, cur, sql, params, logger=None):
-        if not params:
-            return
-        values = ", ".join(str(param) for param in params)
-        query = f"{sql} {values}"
-        if logger is not None:
-            logger.debug(query)
-        cur.execute(query)
-        cur.close()
-
     def execute_sql_fetchall(self, sql, logger=None):
         res = None
         des = None

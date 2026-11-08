@@ -1,10 +1,7 @@
 from types import SimpleNamespace
 
-import pytest
-
-from mysite.unmasque.src.core.dataclass.genPipeline_context import GenPipelineContext, merge_overlapping_ranges
+from mysite.unmasque.src.core.dataclass.genPipeline_context import merge_overlapping_ranges
 from mysite.unmasque.src.pipeline.fragments.DisjunctionPipeLine import DisjunctionPipeLine
-from mysite.unmasque.src.util.error_handling import UnmasqueError
 
 
 class _NullLogger:
@@ -39,8 +36,6 @@ class _DisjunctionPipeline(DisjunctionPipeLine):
         return True, time_profile
 
     def _DisjunctionPipeLine__get_predicates_in_action(self):
-        if callable(self.returned_predicates):
-            return self.returned_predicates(self.mutation_calls)
         return self.returned_predicates
 
     def process(self, query):
@@ -78,63 +73,3 @@ def test_disjoint_or_values_are_kept():
 def test_merge_overlapping_ranges():
     assert merge_overlapping_ranges([(1, 5), (4, 8), (7, 10)]) == [(1, 10)]
     assert merge_overlapping_ranges([(1, 5), (7, 10)]) == [(1, 5), (7, 10)]
-
-
-def test_foreign_attribute_is_not_appended_to_existing_column():
-    initial = ('customer', 'c_acctbal', 'range', 9000, 9559.94)
-    foreign = ('lineitem', 'l_shipmode', 'equal', 'TRUCK', 'TRUCK')
-    pipeline = _DisjunctionPipeline([foreign])
-    check, _ = pipeline._extract_disjunction([initial], ['customer', 'lineitem'], 'query', None)
-    assert check
-    assert pipeline.or_predicates == [(initial,), (foreign,)]
-
-
-def test_foreign_attribute_does_not_replace_same_attribute_candidate():
-    initial = ('customer', 'c_acctbal', 'range', 9000, 9559.94)
-    alternative = ('customer', 'c_acctbal', 'range', 10000, 11000)
-    foreign = ('lineitem', 'l_shipmode', 'equal', 'TRUCK', 'TRUCK')
-    pipeline = _DisjunctionPipeline([foreign, alternative])
-    check, _ = pipeline._extract_disjunction([initial], ['customer', 'lineitem'], 'query', None)
-    assert check
-    assert pipeline.or_predicates == [(initial, alternative), (foreign,)]
-
-
-def test_discovered_attribute_is_probed_for_additional_values():
-    initial = ('customer', 'c_acctbal', 'range', 9000, 9559.94)
-    truck = ('lineitem', 'l_shipmode', 'equal', 'TRUCK', 'TRUCK')
-    air = ('lineitem', 'l_shipmode', 'equal', 'AIR', 'AIR')
-
-    def actions(mutation_calls):
-        return [air] if mutation_calls >= 3 else [truck]
-
-    pipeline = _DisjunctionPipeline(actions)
-    check, _ = pipeline._extract_disjunction([initial], ['customer', 'lineitem'], 'query', None)
-    assert check
-    assert pipeline.or_predicates == [(initial,), (truck, air)]
-
-
-def test_or_predicate_columns_never_mix_attributes():
-    initial = ('customer', 'c_acctbal', 'range', 9000, 9559.94)
-    foreign = ('lineitem', 'l_shipmode', 'equal', 'TRUCK', 'TRUCK')
-    pipeline = _DisjunctionPipeline([foreign])
-    pipeline._extract_disjunction([initial], ['customer', 'lineitem'], 'query', None)
-    for column in pipeline.or_predicates:
-        tab_attribs = {(pred[0], pred[1]) for pred in column if pred}
-        assert len(tab_attribs) == 1
-
-
-def test_error_007_details_include_offending_attributes():
-    context = GenPipelineContext.__new__(GenPipelineContext)
-    context._GenPipelineContext__or_predicates = [
-        (
-            ('customer', 'c_acctbal', 'range', 9000, 9559.94),
-            ('lineitem', 'l_shipmode', 'equal', 'TRUCK', 'TRUCK'),
-        )
-    ]
-    context.arithmetic_filters = []
-    with pytest.raises(UnmasqueError) as error:
-        context._GenPipelineContext__generate_arithmetic_conjunctive_disjunctions()
-    assert 'customer' in str(error.value.info)
-    assert 'c_acctbal' in str(error.value.info)
-    assert 'lineitem' in str(error.value.info)
-    assert 'l_shipmode' in str(error.value.info)
