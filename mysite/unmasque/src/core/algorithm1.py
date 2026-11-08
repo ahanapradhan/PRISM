@@ -245,11 +245,10 @@ def construct_pretty_print_string(Partials):
 
 
 def nullify_and_runQuery(QH, db, s):
-    try:
-        db.nullify_except(s)
-        return db.run_query(QH)
-    finally:
-        db.revert_nullify()
+    db.nullify_except(s)
+    Res = db.run_query(QH)
+    db.revert_nullify()
+    return Res
 
 
 def init(db, QH):

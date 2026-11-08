@@ -146,7 +146,6 @@ class MyTestCase(BaseTestCase):
         self.conn.connectUsingParams()
         self.assertTrue(self.conn.conn is not None)
         db = UnionFromClause(self.conn)
-        db.reset_data_schema()
 
         p, pstr, _ = algorithm1.algo(db, query)
         self.assertEqual(p, {frozenset({'lineitem', 'part'}), frozenset({'lineitem', 'orders'})})
@@ -157,7 +156,6 @@ class MyTestCase(BaseTestCase):
         self.conn.connectUsingParams()
         self.assertTrue(self.conn.conn is not None)
         db = UnionFromClause(self.conn)
-        db.reset_data_schema()
 
         p, pstr, _ = algorithm1.algo(db, query)
         self.assertEqual(p, {frozenset({'lineitem', 'part'})})
@@ -174,7 +172,6 @@ class MyTestCase(BaseTestCase):
         self.conn.connectUsingParams()
         self.assertTrue(self.conn.conn is not None)
         db = UnionFromClause(self.conn)
-        db.reset_data_schema()
 
         p, pstr, _ = algorithm1.algo(db, query)
         self.assertEqual(p, {frozenset({'lineitem', 'part'}), frozenset({'lineitem', 'orders'}),
@@ -194,7 +191,6 @@ class MyTestCase(BaseTestCase):
         self.conn.connectUsingParams()
         self.assertTrue(self.conn.conn is not None)
         db = UnionFromClause(self.conn)
-        db.reset_data_schema()
 
         p, pstr, _ = algorithm1.algo(db, query)
         print(p)
