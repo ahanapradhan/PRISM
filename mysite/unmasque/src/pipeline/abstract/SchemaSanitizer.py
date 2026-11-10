@@ -14,7 +14,7 @@ class SchemaSanitizer:
         self.all_sizes = all_sizes
         self.all_relations = []
         self.connectionHelper = connectionHelper
-        self.logger = Log("TpchSanitizer", connectionHelper.config.log_level)
+        self.logger = Log("SchemaSanitizer", connectionHelper.config.log_level)
 
     def remove_footprint(self):
         self.connectionHelper.execute_sql([f"Drop Schema if exists {self.connectionHelper.config.schema} cascade;"],
