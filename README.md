@@ -16,7 +16,7 @@ PRISM deterministically extracts a hidden SQL query `Q_H` from an initial databa
 
 ## Quick Start
 
-1. Install PostgreSQL and load TPC-H data ([Database Setup](#1-database-setup)).
+1. Install PostgreSQL and load TPC-H data ([Database Setup](#1-database-setup)). For the JOB database, use the `JOB` branch of this repo instead ([details](#13-using-the-job-database-alternative-to-tpc-h)).
 2. Install Python 3.8+ and the dependencies ([Python Environment](#2-python-environment)).
 3. Edit `mysite/config.ini` with your database credentials.
 4. From inside `mysite`, run:
@@ -60,23 +60,43 @@ Choose **one** of the three options.
 
 Load TPC-H using the DuckDB extension: <https://duckdb.org/docs/extensions/tpch.html>
 
+#### 1.3 Using the JOB Database (alternative to TPC-H)
+
+To run PRISM on the JOB (Join Order Benchmark) database instead of TPC-H:
+
+1. Load the JOB database into PostgreSQL.
+2. In the [PRISM repository](https://github.com/ahanapradhan/PRISM), switch to the **`JOB` branch**. It contains the config files for the JOB database (for example, the schema's key details in place of the TPC-H `pkfkrelations.csv`, and a matching `config.ini`).
+3. Use those config files in `mysite` in place of the default ones, and set your database credentials in `config.ini`.
+
+```bash
+git checkout JOB
+```
+
+See [Configuration](#configuration) for what each file controls.
+
 ### 2. Python Environment
 
 Install an IDE (optional), e.g. [PyCharm Community Edition](https://www.jetbrains.com/pycharm/download/). Any other IDE is fine.
 
 **Requirements**
 
-| Package | Version |
-|---|---|
-| Python | 3.8.0 or above |
-| `django` | 4.2.4 |
-| `sympy` | 1.4 |
-| `psycopg2` | 2.9.3 |
-| `numpy` | 1.22.4 |
+| Package | Version | Needed for |
+|---|---|---|
+| Python | 3.8.0 or above | Everything |
+| `sympy` | 1.4 | Everything |
+| `psycopg2` | 2.9.3 | Everything |
+| `numpy` | 1.22.4 | Everything |
+| `django` | 4.2.4 | GUI only (**optional**, no longer maintained) |
 
 ```bash
-pip install django==4.2.4 sympy==1.4 psycopg2==2.9.3 numpy==1.22.4
+# Required for running from the terminal or an IDE
+pip install sympy==1.4 psycopg2==2.9.3 numpy==1.22.4
+
+# Only if you want the (unmaintained) Django GUI
+pip install django==4.2.4
 ```
+
+> Django is **not** required to run PRISM from the terminal.
 
 ---
 
@@ -88,6 +108,8 @@ Two files in the `mysite` directory control the setup:
 |---|---|
 | `pkfkrelations.csv` | Primary/foreign key details for the TPC-H schema. Change it if you use a different schema. |
 | `config.ini` | Database credentials and feature flags. |
+
+> For the JOB database, the ready-made config files are in the `JOB` branch of the repo ([see Database Setup](#13-using-the-job-database-alternative-to-tpc-h)).
 
 ### `config.ini` sections
 
@@ -119,9 +141,11 @@ Run the `main` function in `main_cmd.py`.
 
 > `main_cmd.py` uses relative imports. If this causes import errors when running from an IDE, change them to absolute imports.
 
-### GUI
+### GUI (no longer maintained)
 
-From inside the `unmasque` folder:
+> The Django-based UI is **no longer maintained** and may not work with current code. Prefer the command line or an IDE. Django is not needed for those.
+
+If you still want to try it, install Django (see [Python Environment](#2-python-environment)), then from inside the `unmasque` folder:
 
 ```bash
 python3 manage.py runserver
@@ -196,4 +220,4 @@ PRISM can deterministically extract `Q_H` from `D_I` only if the following hold.
 | 2 | `Q_H` produces a populated result on `D_I`. With outer joins or unions, the result must be a **FIT-result**, i.e. contain at least one tuple with no NULL values. |
 | 3 | No table is repeated in the `FROM` clause (no self-joins). |
 | 4 | `Q_H` is conjunctive, extended to a conjunction of clauses, each a disjunction of atomic predicates. |
-| 5 | `Q_H` is not a pure count query if it has union or outer joins. |
+| 5 | `Q_H` is not a pure count query. |
