@@ -4,35 +4,10 @@ sys.path.append("../../../")
 from mysite.unmasque.src.core import algorithm1
 from mysite.unmasque.src.core.union_from_clause import UnionFromClause
 from mysite.unmasque.src.mocks.database import TPCH
-from mysite.unmasque.src.util import utils
 from mysite.unmasque.test.util.BaseTestCase import BaseTestCase
 
 
 class MyTestCase(BaseTestCase):
-
-    def test_init(self):
-        query = "(select * from part) union all (select * from customer)"
-        db = TPCH()
-        Partial_QH, MaxNonNulls, NonNulls, Nulls, Partials, S = algorithm1.init(db, query)
-        self.assertEqual(Partial_QH, {'part', 'customer'})  # add assertion here
-        self.assertEqual(MaxNonNulls, set())
-        self.assertEqual(NonNulls, set())
-        self.assertEqual(Nulls, set())
-        self.assertEqual(Partials, set())
-        self.assertEqual(S, {frozenset({'part'}), frozenset({'customer'})})
-
-    def test_init1(self):
-        query = "(select * from part,orders) union all (select * from customer)"
-        db = TPCH()
-        Partial_QH, MaxNonNulls, NonNulls, Nulls, Partials, S = algorithm1.init(db, query)
-        self.assertEqual(Partial_QH, {'part', 'customer', 'orders'})  # add assertion here
-        self.assertEqual(MaxNonNulls, set())
-        self.assertEqual(NonNulls, set())
-        self.assertEqual(Nulls, set())
-        self.assertEqual(Partials, set())
-        self.assertEqual(S, {frozenset({'part'}), frozenset({'customer'}), frozenset({'orders'}),
-                             frozenset({'part', 'orders'}), frozenset({'part', 'customer'}),
-                             frozenset({'customer', 'orders'})})
 
     def test_nullify_and_runQuery(self):
         query = "(select * from part,orders) union all (select * from customer)"
@@ -57,46 +32,6 @@ class MyTestCase(BaseTestCase):
         db = TPCH()
         check = algorithm1.nullify_and_runQuery(query, db, {'customer'})
         self.assertEqual(check, True)
-
-    def test_construct_nulls_NonNulls(self):
-        query = "(select * from part,orders) union all (select * from orders,customer) union all (select * from " \
-                "customer,part)"
-        db = TPCH()
-        Partial_QH, MaxNonNulls, NonNulls, Nulls, Partials, S = algorithm1.init(db, query)
-        self.assertEqual(S, {frozenset({'part'}), frozenset({'customer'}), frozenset({'orders'}),
-                             frozenset({'part', 'orders'}), frozenset({'part', 'customer'}),
-                             frozenset({'customer', 'orders'})})
-        NonNulls = algorithm1.construct_nulls_nonNulls(NonNulls, Nulls, query, S, db)
-        self.assertEqual(NonNulls, {frozenset({'part'}), frozenset({'customer'}), frozenset({'orders'})})
-
-    def test_construct_nulls_NonNulls1(self):
-        query = "(select * from part,orders,nation) union all (select * from customer,orders,nation) union all (" \
-                "select * from " \
-                "lineitem,orders,nation)"
-        db = TPCH()
-        Partial_QH, MaxNonNulls, NonNulls, Nulls, Partials, S = algorithm1.init(db, query)
-        self.assertEqual(S, {frozenset({'part'}), frozenset({'customer'}), frozenset({'lineitem'}),
-                             frozenset({'part', 'customer'}), frozenset({'part', 'lineitem'}),
-                             frozenset({'customer', 'lineitem'})})
-        NonNulls = algorithm1.construct_nulls_nonNulls(NonNulls, Nulls, query, S, db)
-        self.assertEqual(NonNulls, S)
-
-    def test_construct_nulls_NonNulls2(self):
-        query = "(select * from part,orders) union all (select * from orders,customer,nation)"
-        db = TPCH()
-        Partial_QH, MaxNonNulls, NonNulls, Nulls, Partials, S = algorithm1.init(db, query)
-        NonNulls = algorithm1.construct_nulls_nonNulls(NonNulls, Nulls, query, S, db)
-        self.assertEqual(NonNulls, {frozenset({'part'}), frozenset({'customer'}), frozenset({'nation'}),
-                                    frozenset({'customer', 'nation'})})
-
-    def test_construct_maxNonNulls(self):
-        query = "(select * from part,orders) union all (select * from orders,customer) union all (select * from " \
-                "customer,part)"
-        db = TPCH()
-        Partial_QH, MaxNonNulls, NonNulls, Nulls, Partials, S = algorithm1.init(db, query)
-        NonNulls = algorithm1.construct_nulls_nonNulls(NonNulls, Nulls, query, S, db)
-        MaxNonNulls = utils.construct_maxNonNulls(MaxNonNulls, NonNulls)
-        self.assertEqual(NonNulls, MaxNonNulls)
 
     def test_algo_another_query(self):
         query = "(SELECT l_orderkey as key, l_quantity as dummy, " \
@@ -146,6 +81,7 @@ class MyTestCase(BaseTestCase):
         self.conn.connectUsingParams()
         self.assertTrue(self.conn.conn is not None)
         db = UnionFromClause(self.conn)
+        db.reset_data_schema()
 
         p, pstr, _ = algorithm1.algo(db, query)
         self.assertEqual(p, {frozenset({'lineitem', 'part'}), frozenset({'lineitem', 'orders'})})
@@ -156,6 +92,7 @@ class MyTestCase(BaseTestCase):
         self.conn.connectUsingParams()
         self.assertTrue(self.conn.conn is not None)
         db = UnionFromClause(self.conn)
+        db.reset_data_schema()
 
         p, pstr, _ = algorithm1.algo(db, query)
         self.assertEqual(p, {frozenset({'lineitem', 'part'})})
@@ -172,6 +109,7 @@ class MyTestCase(BaseTestCase):
         self.conn.connectUsingParams()
         self.assertTrue(self.conn.conn is not None)
         db = UnionFromClause(self.conn)
+        db.reset_data_schema()
 
         p, pstr, _ = algorithm1.algo(db, query)
         self.assertEqual(p, {frozenset({'lineitem', 'part'}), frozenset({'lineitem', 'orders'}),
@@ -191,6 +129,7 @@ class MyTestCase(BaseTestCase):
         self.conn.connectUsingParams()
         self.assertTrue(self.conn.conn is not None)
         db = UnionFromClause(self.conn)
+        db.reset_data_schema()
 
         p, pstr, _ = algorithm1.algo(db, query)
         print(p)

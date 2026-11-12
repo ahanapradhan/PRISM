@@ -27,6 +27,10 @@ class UnionPipeLine(OuterJoinPipeLine):
         self.core_relations = [item for subset in p for item in subset]
         self.all_relations = union.all_relations
         self.all_sizes = union.all_sizes
+        # all_sizes is a shared mutable dict: CS2/ViewMinimizer rewrite it with
+        # minimized row counts. Keep the pristine user-schema sizes so every
+        # branch starts from the true table sizes.
+        original_sizes = dict(self.all_sizes)
         self.key_lists = union.key_lists
         self.logger.debug(f"relations, {self.all_relations} all sizes, {self.all_sizes}, key list: {self.key_lists}")
         u_eq = []
@@ -37,6 +41,12 @@ class UnionPipeLine(OuterJoinPipeLine):
             core_relations = [r for r in rels]
             self.logger.debug(core_relations)
             self.info[FROM_CLAUSE] = core_relations
+
+            # Reset to the pristine sizes. Without this, a previous branch's
+            # minimized size makes DbRestorer's size-equality check wrongly
+            # skip the restore (ERROR_001: query gives non-populated result).
+            self.all_sizes.clear()
+            self.all_sizes.update(original_sizes)
 
             nullify = set(self.all_relations).difference(core_relations)
 

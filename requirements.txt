@@ -1,0 +1,43 @@
+# PRISM / UNMASQUE — Python dependencies
+#
+# Install with:
+#   pip install -r requirements.txt
+#
+# Baseline: Python 3.8+ (see README).
+# Version notes:
+#   * sympy is pinned to 1.4 because the code uses the old import paths
+#     `sympy.matrices.matrices.MatrixBase` and `sympy.tensor.array.NDimArray`.
+#   * other packages use lower bounds so pip can pick a wheel for the
+#     interpreter you run (3.8 through 3.13).
+#   * if `psycopg2` fails to build (no pg_config), use `psycopg2-binary`.
+
+# ---------------------------------------------------------------------------
+# Core runtime — required for `python -m unmasque.src.main_cmd`
+# ---------------------------------------------------------------------------
+sympy==1.4                    # projection.py (MatrixBase, NDimArray, simplify, ...)
+psycopg2>=2.9.3               # PostgreSQL driver (PostgresConnectionHelper)
+numpy>=1.22.4                 # projection.py numerical helpers
+frozenlist>=1.3.3             # frozenlist._frozenlist.FrozenList (groupby, limit, orderby, pipelines)
+pandas>=1.5.0,<3.0            # read_sql_query in ExecutableFactory / view_minimizer
+tabulate>=0.8.10              # elapsed_time.py (time profile tables)
+python-dateutil>=2.8.2        # dateutil.relativedelta in util/utils.py
+
+# ---------------------------------------------------------------------------
+# Django GUI — optional, only for `python3 manage.py runserver`
+# ---------------------------------------------------------------------------
+django==4.2.4
+
+# ---------------------------------------------------------------------------
+# Test suite and experiment/reporting scripts — optional
+# ---------------------------------------------------------------------------
+pytest>=7.0                   # unmasque/test/*.py
+matplotlib>=3.5               # test/experiment plots
+python-docx>=1.0              # test/experiments/code_gen.py (`import docx`)
+pygnuplot>=0.10               # test/results/UnionTestAndPlot.py, UN1TestAndPlot.py
+
+# ---------------------------------------------------------------------------
+# NOTE: mysite/cubes is a separate vendored baseline (SQuARE/CUBES), not
+# imported by PRISM. Its dependencies are installed per mysite/cubes/README.md
+# (conda.txt + a pip line that includes libs/TestSuiteEval-1.0.3-py3-none-any.whl
+# and rpy2; rpy2 additionally requires an R installation).
+# ---------------------------------------------------------------------------
