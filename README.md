@@ -80,23 +80,18 @@ Install an IDE (optional), e.g. [PyCharm Community Edition](https://www.jetbrain
 
 **Requirements**
 
-| Package | Version | Needed for |
-|---|---|---|
-| Python | 3.8.0 or above | Everything |
-| `sympy` | 1.4 | Everything |
-| `psycopg2` | 2.9.3 | Everything |
-| `numpy` | 1.22.4 | Everything |
-| `django` | 4.2.4 | GUI only (**optional**, no longer maintained) |
+| Package | Version |
+|---|---|
+| Python | 3.8.0 or above |
+| `sympy` | 1.4 |
+| `psycopg2` | 2.9.3 |
+| `numpy` | 1.22.4 |
+| `django` | 4.2.4 |
+|frozenlist | >=1.3.3 |
+| pandas | >=1.5,<3 |
+| tabulate |>=0.8.10 |
+| python-dateutil | >=2.8.2|
 
-```bash
-# Required for running from the terminal or an IDE
-pip install sympy==1.4 psycopg2==2.9.3 numpy==1.22.4
-
-# Only if you want the (unmaintained) Django GUI
-pip install django==4.2.4
-```
-
-> Django is **not** required to run PRISM from the terminal.
 
 ---
 
