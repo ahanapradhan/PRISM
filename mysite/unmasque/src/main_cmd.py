@@ -1347,7 +1347,7 @@ if __name__ == '__main__':
         TestQuery("NEP10",
                   "SELECT * FROM part WHERE p_size <> 20 AND p_retailprice <> 1150.25 AND p_brand <> 'Brand#53' AND p_mfgr <> 'Manufacturer#3' AND p_type <> 'PROMO BRUSHED BRASS' AND p_container <> 'LG JAR' AND p_name <> 'goldenrod lavender spring chocolate lace' AND p_comment <> 'lar accounts amo' AND p_partkey <> 500 AND p_retailprice <> 1650.75;",
                   False, False, False, True, False)]
-    workload += [TestQuery(f"OJ{k}", oj_chain(k), False, False, True, False) for k in range(1, 8)]
+    workload += [TestQuery(f"OJ{k}", oj_chain(k), False, True, True, True, True) for k in range(1, 8)]
     workload += [TestQuery(f"DS{k}", disj_str_query(k), False, False, False, False, True)
                   for k in range(1, 11)]
     workload += [TestQuery(f"UK{k}", fixed_aux_query(k), False, True, False, False) for k in FA_SPLITS]
