@@ -9,6 +9,8 @@ class Union(AppExtractorBase):
         super().__init__(connectionHelper, "Union")
         self.key_lists = None
         self.all_relations = None
+        self.init_elapsed_time = 0
+        self.init_app_calls = 0
         self.enabled = self.connectionHelper.config.detect_union
 
     def extract_params_from_args(self, args):
@@ -18,7 +20,14 @@ class Union(AppExtractorBase):
         query = self.extract_params_from_args(args)
         db = UnionFromClause(self.connectionHelper)
         db.reset_data_schema()
+        init_was_done = db.fromClause.init.done
         p, pstr, union_profile = algorithm1.algo(db, query)
+        # Initiator runs inside the union extraction's from-clause probe. Record
+        # its one-time pre-extraction cost so the pipeline can report it apart
+        # from the Union/From Clause module rows.
+        if not init_was_done and db.fromClause.init.local_elapsed_time is not None:
+            self.init_elapsed_time = db.fromClause.init.local_elapsed_time
+            self.init_app_calls = db.fromClause.init.app_calls
         self.all_relations = db.get_relations()
         self.all_sizes = db.get_all_sizes()
         self.key_lists = db.fromClause.init.global_key_lists

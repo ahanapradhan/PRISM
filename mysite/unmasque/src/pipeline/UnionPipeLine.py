@@ -84,7 +84,11 @@ class UnionPipeLine(OuterJoinPipeLine):
 
     def __update_time_profile(self, union, union_time):
         duration, app_calls = union_time[0], union_time[1]
-        self.time_profile.update_for_from_clause(union.local_elapsed_time - duration, union.app_calls - app_calls)
+        init_time = getattr(union, "init_elapsed_time", 0) or 0
+        if init_time:
+            self.time_profile.update_for_init(init_time, getattr(union, "init_app_calls", 0) or 0)
+        self.time_profile.update_for_from_clause(
+            union.local_elapsed_time - duration - init_time, union.app_calls - app_calls)
         self.time_profile.update_for_union(duration, app_calls)
 
     def __nullify_relations(self, relations):

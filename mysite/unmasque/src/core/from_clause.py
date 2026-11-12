@@ -69,6 +69,7 @@ class FromClause(AppExtractorBase):
                      self.connectionHelper.queries.alter_table_rename_to(
                          self.get_original_table_name(self._get_dirty_name(tabname)), tabname)], self.logger)
                 """
+        return self.core_relations
 
     def get_core_relations_by_error(self, query):
         for tabname in self.all_relations:
@@ -123,16 +124,20 @@ class FromClause(AppExtractorBase):
         setup_done = self.setup(query)
         if not setup_done:
             return False
-        print(f"Start from {str(datetime.datetime.now().time())}")
+        # print(f"Start from {str(datetime.datetime.now().time())}")
         query, method = self.extract_params_from_args(args)
+        # TYPE_RENAME is passed explicitly by UnionFromClause.get_comTabs() to
+        # detect common tables. There, an empty result means "no common table",
+        # which is a valid answer and must not become ERROR_006 / the OK string.
+        is_common_table_check = bool(method) and method == self.TYPE_RENAME
         if not method:
             method = self.method
         self.core_relations = []
         if method == self.TYPE_RENAME:
-            self.get_core_relations_by_void(query)
+            self.core_relations = self.get_core_relations_by_void(query)
         else:
             self.get_core_relations_by_error(query)
-        if len(self.core_relations) == 0:
+        if len(self.core_relations) == 0 and not is_common_table_check:
             raise UnmasqueError(ERROR_006, "from_clause", {})
         return self.core_relations
 

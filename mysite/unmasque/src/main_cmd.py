@@ -176,7 +176,7 @@ WHERE p_partkey = ps_partkey
   AND n_regionkey = r_regionkey 
   AND r_name = 'MIDDLE EAST'
 ORDER BY s_acctbal DESC, n_name, s_name, p_partkey
-LIMIT 100;""",False, False, False, False),
+LIMIT 100;""",False, True, True, True, True),
                      TestQuery("MQ3", """SELECT l_orderkey, 
        SUM(l_extendedprice * (1 - l_discount)) AS revenue, 
        o_orderdate, o_shippriority
@@ -253,7 +253,7 @@ WHERE c_phone LIKE '27-%'
   AND o_orderkey = l_orderkey
 GROUP BY c_name, o_orderdate, o_totalprice
 ORDER BY o_orderdate, o_totalprice DESC
-LIMIT 100;""",False, False, False, False),
+LIMIT 100;""",False, True, True, True, True),
                      TestQuery("MQ21", """SELECT s_name, COUNT(*) AS numwait
 FROM supplier, lineitem l1, orders, nation
 WHERE s_suppkey = l1.l_suppkey 
