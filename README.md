@@ -220,4 +220,4 @@ PRISM can deterministically extract `Q_H` from `D_I` only if the following hold.
 | 2 | `Q_H` produces a populated result on `D_I`. With outer joins or unions, the result must be a **FIT-result**, i.e. contain at least one tuple with no NULL values. |
 | 3 | No table is repeated in the `FROM` clause (no self-joins). |
 | 4 | `Q_H` is conjunctive, extended to a conjunction of clauses, each a disjunction of atomic predicates. |
-| 5 | `Q_H` is not a pure count query. |
+| 5 | `Q_H` is not a pure count query if it has unions or outer joins. |
