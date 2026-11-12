@@ -140,7 +140,9 @@ Change this query to try PRISM for various inputs.
 #### From Command Line:
 Change the current directory to `mysite`.
 Use the following command:  
-`python -m unmasque.src.main_cmd` 
+`python -m unmasque.src.main_cmd <qid>` 
+
+The main_cmd.py file has a list of test workloads, each with a qid. To test it with more queries, they can be added to the workload.
 
 #### From IDE:
 the `main` function in main_cmd.py can be run from the IDE.  
