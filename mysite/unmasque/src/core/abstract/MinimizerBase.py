@@ -32,11 +32,14 @@ class Minimizer(AppExtractorBase, ABC):
     def extract_params_from_args(self, args):
         return args[0]
 
-    def sanity_check(self, query):
+    def sanity_check(self, query, expect_populated=True):
         # SANITY CHECK
         new_result = self.app.doJob(query)
         if self.app.isQ_result_no_full_nullfree_row(new_result):
-            self.logger.error("Error: Query out of extractable domain\n")
+            if expect_populated:
+                self.logger.error("Error: Query out of extractable domain\n")
+            else:
+                self.logger.debug("Falsified OR probe returned no rows, as expected.")
             return False
         return True
 

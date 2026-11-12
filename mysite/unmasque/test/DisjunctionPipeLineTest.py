@@ -31,7 +31,8 @@ class _DisjunctionPipeline(DisjunctionPipeLine):
         self.returned_predicates = returned_predicates
         self.mutation_calls = 0
 
-    def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None):
+    def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None,
+                           expect_populated=True):
         self.mutation_calls += 1
         return True, time_profile
 

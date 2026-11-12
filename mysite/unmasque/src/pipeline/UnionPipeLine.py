@@ -22,7 +22,6 @@ class UnionPipeLine(OuterJoinPipeLine):
         self.connectionHelper.closeConnection()
 
         self.info[UNION] = [list(ele) for ele in p]
-        print(f"Now end {str(datetime.datetime.now().time())}")
         self.__update_time_profile(union, union_profile)
         self.core_relations = [item for subset in p for item in subset]
         self.all_relations = union.all_relations

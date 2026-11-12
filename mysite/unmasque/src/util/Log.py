@@ -17,7 +17,7 @@ class Log(logging.Logger):
     # creating a formatter
     # Include the source line number that emitted the record.
     formatter = logging.Formatter(
-        '%(asctime)s- %(name)s - %(levelname)-8s [l %(lineno)d]: %(message)s')
+        '%(asctime)s- %(name)s[l:%(lineno)d] - %(levelname)-8s: %(message)s')
 
     def __init__(self, name, level):
         super().__init__(name, level)

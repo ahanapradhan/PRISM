@@ -23,6 +23,19 @@ def get_eq_filters(arithmetics):
     return [pred for pred in arithmetics if pred[2] in ['equal', '=']]
 
 
+def probe_expects_populated(restore_details):
+    """Whether an OR-probe database is expected to answer the query.
+
+    An OR probe deliberately falsifies the candidate predicates, so the working
+    schema is expected to return no rows. Any non-trivial ``where`` clause marks
+    such a falsified probe; all-``true`` clauses mean the database is restored
+    normally and a populated result is still expected.
+    """
+    if not restore_details:
+        return True
+    return not any(str(where).strip().lower() != 'true' for _, where in restore_details)
+
+
 class DisjunctionPipeLine(GenericPipeLine, ABC):
 
     def __init__(self, connectionHelper, name):
@@ -35,7 +48,8 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         self.key_lists = None
         self.OR_CUTOFF = 1000
 
-    def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None):
+    def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None,
+                           expect_populated=True):
         self.update_state(RESTORE_DB + START)
         self.db_restorer = DbRestorer(self.connectionHelper, core_relations)
         self.db_restorer.set_data_schema()
@@ -74,7 +88,8 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
             View based Database Minimization
             """
         self.update_state(DB_MINIMIZATION + START)
-        vm = ViewMinimizer(self.connectionHelper, core_relations, self.db_restorer.last_restored_size, cs2.passed)
+        vm = ViewMinimizer(self.connectionHelper, core_relations, self.db_restorer.last_restored_size, cs2.passed,
+                           expect_populated=expect_populated)
         self.update_state(DB_MINIMIZATION + RUNNING)
         try:
             check = vm.doJob(query)
@@ -84,9 +99,14 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
             e.report_to_logger(self.logger)
 
         if not check or not vm.done:
-            # self.error = "Cannot do database minimization"
-            self.logger.error(self.error)
-            self.update_state(ERROR)
+            if expect_populated:
+                # self.error = "Cannot do database minimization"
+                self.logger.error(self.error)
+                self.update_state(ERROR)
+            else:
+                # A falsified OR probe is expected to be empty; no disjunct
+                # exists here, so this is not an error.
+                self.logger.info("No disjunct exists; skipping database minimization for this OR probe.")
             self.info[DB_MINIMIZATION] = None
             return False, time_profile
 
@@ -210,7 +230,9 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
 
                 restore_details = self.__get_OR_db_restoration_details(core_relations, in_candidates)
                 self.logger.debug(restore_details)
-                check, time_profile = self._mutation_pipeline(core_relations, query, time_profile, restore_details)
+                expect_populated = probe_expects_populated(restore_details)
+                check, time_profile = self._mutation_pipeline(core_relations, query, time_profile, restore_details,
+                                                              expect_populated=expect_populated)
                 if not check or not self.__get_predicates_in_action():
                     or_eq_predicates.append(tuple())
                     continue
