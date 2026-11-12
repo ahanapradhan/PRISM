@@ -1,6 +1,154 @@
-# Extractable Query Class:
----------------------------------------------------------------------------------------
+# PRISM
 
+PRISM deterministically extracts a hidden SQL query `Q_H` from an initial database `D_I`. It is `unmasque` core extended with the notion of FIT-ness (fully instantiated results), plus the full implementation of the PRISM extractors.
+
+## Contents
+
+1. [Quick Start](#quick-start)
+2. [Setup](#setup)
+3. [Configuration](#configuration)
+4. [Running PRISM](#running-prism)
+5. [Project Layout](#project-layout)
+6. [Extractable Query Class](#extractable-query-class)
+7. [Observability Conditions](#observability-conditions)
+
+---
+
+## Quick Start
+
+1. Install PostgreSQL and load TPC-H data ([Database Setup](#1-database-setup)).
+2. Install Python 3.8+ and the dependencies ([Python Environment](#2-python-environment)).
+3. Edit `mysite/config.ini` with your database credentials.
+4. From inside `mysite`, run:
+
+   ```bash
+   python -m unmasque.src.main_cmd <qid>
+   ```
+
+---
+
+## Setup
+
+### 1. Database Setup
+
+#### 1.1 Install PostgreSQL
+
+Download and install the distribution for your platform: <https://www.postgresql.org/download/>
+
+#### 1.2 Load TPC-H Data
+
+Choose **one** of the three options.
+
+**Option A: Sample data (fastest)**
+
+- Download the TPC-H 100MB (sf=0.1) data: [tpch_tiny.zip](https://github.com/ahanapradhan/UnionExtraction/blob/master/mysite/unmasque/test/experiments/data/tpch_tiny.zip)
+- Update `load.sql` in the extracted folder with the location of your `.csv` data files.
+
+**Option B: Generate data with DBGEN**
+
+1. *Obtain DBGEN*
+   1. Open the [TPC specifications page](https://www.tpc.org/tpc_documents_current_versions/current_specifications5.asp).
+   2. In the `Active Benchmarks` table (first table), follow the `Download TPC-H_Tools_v3.0.1.zip` link. It redirects to the `TPC-H Tools Download` page.
+   3. Enter your details and click `download`. A download link is emailed to you.
+   4. Download and unzip the file. The extracted contents must include the `dbgen` folder.
+2. *Load into PostgreSQL*
+   1. Download [`tpch-pgsql`](https://github.com/ahanapradhan/tpch-pgsql).
+   2. Follow its README to prepare and load the data.
+   3. If you get an error that `malloc.h` is not found, open the file named in the error (inside the `dbgen` folder) and replace `malloc.h` with `stdlib.h`.
+
+**Option C: DuckDB**
+
+Load TPC-H using the DuckDB extension: <https://duckdb.org/docs/extensions/tpch.html>
+
+### 2. Python Environment
+
+Install an IDE (optional), e.g. [PyCharm Community Edition](https://www.jetbrains.com/pycharm/download/). Any other IDE is fine.
+
+**Requirements**
+
+| Package | Version |
+|---|---|
+| Python | 3.8.0 or above |
+| `django` | 4.2.4 |
+| `sympy` | 1.4 |
+| `psycopg2` | 2.9.3 |
+| `numpy` | 1.22.4 |
+
+```bash
+pip install django==4.2.4 sympy==1.4 psycopg2==2.9.3 numpy==1.22.4
+```
+
+---
+
+## Configuration
+
+Two files in the `mysite` directory control the setup:
+
+| File | Purpose |
+|---|---|
+| `pkfkrelations.csv` | Primary/foreign key details for the TPC-H schema. Change it if you use a different schema. |
+| `config.ini` | Database credentials and feature flags. |
+
+### `config.ini` sections
+
+| Section | What to set |
+|---|---|
+| `database` | Your database credentials. |
+| `support` | Support file name. The file must be in the same directory as `config.ini`. |
+| `logging` | Log level: `DEBUG` (developer mode), `INFO`, or `ERROR`. |
+| `feature` | Flags for advanced features: `UNION`, `OUTER JOIN`, `<>` / `!=` in arithmetic filter predicates, and `IN`. |
+| `options` | Extractor options. E.g. the maximum `LIMIT` value is 1000; set `limit=value` to raise it. |
+
+---
+
+## Running PRISM
+
+The entry point is `mysite/unmasque/src/main_cmd.py`. It ships with one default input query and a workload list, each entry identified by a `qid`. Sample queries are in the `test.util` package (`queries.py`). To test more queries, add them to the workload.
+
+### Command line
+
+From the `mysite` directory:
+
+```bash
+python -m unmasque.src.main_cmd <qid>
+```
+
+### IDE
+
+Run the `main` function in `main_cmd.py`.
+
+> `main_cmd.py` uses relative imports. If this causes import errors when running from an IDE, change them to absolute imports.
+
+### GUI
+
+From inside the `unmasque` folder:
+
+```bash
+python3 manage.py runserver
+```
+
+Once the server is up on port 8080, open <http://localhost:8080/unmasque/>.
+
+---
+
+## Project Layout
+
+```
+mysite/
+├── config.ini            # DB credentials, feature flags
+├── pkfkrelations.csv     # Key details for the schema
+└── unmasque/
+    ├── src/              # PRISM code: unmasque core + FIT-ness + all extractors
+    └── test/             # (obsolete) unit tests for each extractor module
+```
+
+---
+
+## Extractable Query Class
+
+PRISM can extract queries that conform to the following grammar.
+
+```ebnf
 query      ::= flat | branch (union_op branch)+
 branch     ::= "(" flat ")"
 union_op   ::= UNION ALL
@@ -30,129 +178,22 @@ comparison ::= "=" | "<" | "<=" | ">" | ">="
 order_item ::= (identifier | column) [ASC | DESC]
 column     ::= identifier ["." identifier]
 constant   ::= number | date | string
+```
 
-------------------------------------------------------------------------------
+> `HAVING` support is added within the flat scope. It is not integrated with the newer PRISM features.
+
+---
 
 ## Observability Conditions
 
-The conditions under which PRISM can deterministically extract a hidden query `Q_H` from an initial database `D_I`, in a single list. Each item is tagged with the construct it applies to.
+PRISM can deterministically extract `Q_H` from `D_I` only if the following hold.
 
-1. **[General]** `D_I` is NULL-free (if it is not, a NULL-free sample can be constructed from it).
-2. **[General]** `Q_H` produces a populated result on `D_I`. When outer joins or unions are present, the result must be a fully instantiated result (FIT-result), i.e., it contains at least one tuple with no NULL values.
-3. **[General]** No table is repeated in the `FROM` clause of `Q_H` (no self-joins).
-4. **[General]** `Q_H` is conjunctive, extended to a conjunction of clauses where each clause is a disjunction of atomic predicates.
-5. **[General]** `Q_H` is not a pure count query.
-6. **[Union]** Each subquery `q_i` independently produces a FIT-result on `D_I`.
-7. **[Union]** Each subquery `q_i` is not a pure count query.
-8. **[Union]** For `i ≠ j`, `AUX(q_i)` is not a subset of `AUX(q_j)`, where `AUX(q_i)` is the set of tables of `q_i` that do not occur in every subquery (the non-containment condition).
-9. **[Algebraic predicates (ALP)]** No condition beyond the general ones.
-10. **[Negation (NEP)]** For each negation predicate `col <> val` in `Q_H`, `D_I` contains at least one tuple with `col = val`.
-11. **[Disjunction]** For each disjunct `p_i^j` of each clause `c_j`, `D_I` contains a witness tuple that satisfies `p_i^j` and every other clause `c_l` (`l ≠ j`), but falsifies all other disjuncts of `c_j`.
-12. **[Outer joins]** The projection of `Q_H` contains at least one non-aggregated attribute from every participating relation, so that the NULL-extended side of an outer join is visible in the result.
+### General (always apply)
 
-Remark: `HAVING` clause support is added within the flat-scope. It is not integrated with the new features present in `PRISM`.
-
-# Setting up the PRISM Code:
--------------------------------------------------------------------------------------------------------------------------------------------------
-
-# Setting Up the Database
-## PostgreSQL Installation  
-
-Follow the link https://www.postgresql.org/download/ to download and install the suitable distribution of the database for your platform. 
-
-## Loading TPCH Data  
-
-### Obtaining DBGEN
-1. Open the TPC webpage following the link: https://www.tpc.org/tpc_documents_current_versions/current_specifications5.asp  
-2. In the `Active Benchmarks` table (first table), follow the link of `Download TPC-H_Tools_v3.0.1.zip`, it'll redirect to `TPC-H Tools Download
-` page   
-3. Give your details and click `download`, it'll email you the download link. Use the link to download the zip file.  
-4. Unzip the zip file, and it must have the `dbgen` folder among the extracted contents  
-
-### Prepare TPCH data on PostgreSQL using DBGEN
-1. Download the code `tpch-pgsql` from the link: [https://github.com/Data-Science-Platform/tpch-pgsql/tree/master](https://github.com/ahanapradhan/tpch-pgsql).  
-2. Follow the `tpch-pgsql` project Readme to prepare and load the data.  
-3. (In case the above command gives error as `malloc.h` not found, showing the filenames, go inside dbgen folder, open the file and replace `malloc.h` with `stdlib.h`)
-
-## Sample TPCH Data  
-TPCH 100MB (sf=0.1) data is provided at: https://github.com/ahanapradhan/UnionExtraction/blob/master/mysite/unmasque/test/experiments/data/tpch_tiny.zip  
-The load.sql file in the folder needs to be updated with the corresponding location of the data .csv files.
-
-## Loading TPCH Data using DuckDB
-https://duckdb.org/docs/extensions/tpch.html
-
-# Setting up IDE
-A developement environment for python project is required next. Here is the link to PyCharm Community Edition: https://www.jetbrains.com/pycharm/download/  (Any other IDE is also fine)
-
-### Requirements
-* Python 3.8.0 or above
-* `django==4.2.4`
-* `sympy==1.4`
-* `psycopg2==2.9.3`
-* `numpy==1.22.4`
-
-# Setting Up the Code
-
-The code is organized into the following directories:  
-
-## mysite
-
-The `mysite` directory contains the main project code.
-
-### unmasque
-
-Inside `unmasque`, you'll find the following subdirectories:
-
-#### src
-
-The `src` directory contains code `PRISM` code: which is `unmasque` core extended with the notion of FIT-ness, and the full implementation of PRISM extractors.
-#### test
-
-(obsolete) The `test` directory houses unit test cases for each extractor module. These tests are crucial for ensuring the reliability and correctness of the code.
-
-Please explore the individual directories for more details on the code and its purpose.
-
-# Usage
-
-## Configuration
-inside `mysite` directory, there are two files as follows:  
-pkfkrelations.csv --> contains key details for the TPCH schema. If any other schema is to be used, change this file accordingly.
-config.ini --> This contains database login credentials and flags for optional features. Change the fields accordingly.  
-
-### Config File Details:
-`database` section: set your database credentials.  
-
-`support` section: give support file name. The support file should be present in the same directory of this config file.
-
-`logging` section: set logging level. The developer mode is `DEBUG`. Other valid levels are `INFO`, `ERROR`.
-
-`feature` section: set flags for advanced features, as the flag names indicate. Included features are, `UNION`, `OUTER JOIN`, `<>` or `!=` operator in arithmetic filter predicates and `IN` operator. 
-
-`options` section: extractor options. E.g. the maximum value for `LIMIT` clause is 1000. If the user needs to set a higher value, use `limit=value`.
-
-
-### Running PRISM
-Open `mysite/unmasque/src/main_cmd.py` file.  
-This script has one default input specified.  
-Change this query to try PRISM for various inputs.  
-`test.util` package has `queries.py` file, containing a few sample queries. Any of them can be used for testing.
-
-#### From Command Line:
-Change the current directory to `mysite`.
-Use the following command:  
-`python -m unmasque.src.main_cmd <qid>` 
-
-The main_cmd.py file has a list of test workloads, each with a qid. To test it with more queries, they can be added to the workload.
-
-#### From IDE:
-the `main` function in main_cmd.py can be run from the IDE.  
-
-
-(Current code uses relative imports in main_cmd.py script. If that causes import related error while trying to run from IDE, please change the imports to absolute.)
-
-#### From GUI:
-In the terminal, go inside `unmasque` folder and start the Django app using the command: `python3 manage.py runserver`
-Once the server is up at the 8080 port of localhost, the GUI can be accessed through the link: `http://localhost:8080/unmasque/`
-
-
-
+| # | Condition |
+|---|---|
+| 1 | `D_I` is NULL-free (if not, a NULL-free sample can be constructed from it). |
+| 2 | `Q_H` produces a populated result on `D_I`. With outer joins or unions, the result must be a **FIT-result**, i.e. contain at least one tuple with no NULL values. |
+| 3 | No table is repeated in the `FROM` clause (no self-joins). |
+| 4 | `Q_H` is conjunctive, extended to a conjunction of clauses, each a disjunction of atomic predicates. |
+| 5 | `Q_H` is not a pure count query if it has union or outer joins. |
