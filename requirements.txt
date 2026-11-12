@@ -23,11 +23,6 @@ tabulate>=0.8.10              # elapsed_time.py (time profile tables)
 python-dateutil>=2.8.2        # dateutil.relativedelta in util/utils.py
 
 # ---------------------------------------------------------------------------
-# Django GUI — optional, only for `python3 manage.py runserver`
-# ---------------------------------------------------------------------------
-django==4.2.4
-
-# ---------------------------------------------------------------------------
 # Test suite and experiment/reporting scripts — optional
 # ---------------------------------------------------------------------------
 pytest>=7.0                   # unmasque/test/*.py

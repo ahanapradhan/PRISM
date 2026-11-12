@@ -86,7 +86,6 @@ Install an IDE (optional), e.g. [PyCharm Community Edition](https://www.jetbrain
 | `sympy` | 1.4 |
 | `psycopg2` | 2.9.3 |
 | `numpy` | 1.22.4 |
-| `django` | 4.2.4 |
 |frozenlist | >=1.3.3 |
 | pandas | >=1.5,<3 |
 | tabulate |>=0.8.10 |
@@ -135,18 +134,6 @@ python -m unmasque.src.main_cmd <qid>
 Run the `main` function in `main_cmd.py`.
 
 > `main_cmd.py` uses relative imports. If this causes import errors when running from an IDE, change them to absolute imports.
-
-### GUI (no longer maintained)
-
-> The Django-based UI is **no longer maintained** and may not work with current code. Prefer the command line or an IDE. Django is not needed for those.
-
-If you still want to try it, install Django (see [Python Environment](#2-python-environment)), then from inside the `unmasque` folder:
-
-```bash
-python3 manage.py runserver
-```
-
-Once the server is up on port 8080, open <http://localhost:8080/unmasque/>.
 
 ---
 

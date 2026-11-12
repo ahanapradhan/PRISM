@@ -1,6 +1,5 @@
 import unittest
 from frozenlist import FrozenList
-from mysite.unmasque.src.core.orderby_clause import check_sort_order
 from mysite.unmasque.src.core.executables.nullfree_executable import is_result_nonempty_nullfree
 from ..src.util import utils
 
@@ -22,12 +21,6 @@ class MyTestCase(unittest.TestCase):
         self.assertFalse(is_result_nonempty_nullfree(res1))
         self.assertTrue(is_result_nonempty_nullfree(res2))
         self.assertFalse(is_result_nonempty_nullfree(res3))
-
-
-
-    def test_check_order(self):
-        check = check_sort_order(['-1.09', '-2.99', '-3.01'])
-        print(check)
 
     def test_pairing(self):
         elems = {1, 2, 3}
