@@ -51,15 +51,12 @@ class MutationPipeLineBase(AppExtractorBase, ABC):
                 self.connectionHelper.queries.select_attribs_from_relation([attrib],
                                                             self.get_fully_qualified_table_name(tab)))
             val = res[0][0]
-        except ValueError as e:
+        except ValueError:
             data_problem = True
-            self.logger.debug(e, "Could not fetch data from d_min, getting it from local dmin_instance_dict")
-        except IndexError as e:
+        except IndexError:
             data_problem = True
-            self.logger.debug(e, "Could not fetch data from d_min, getting it from local dmin_instance_dict")
-        except Exception as e:
+        except Exception:
             data_problem = True
-            self.logger.debug(e, "Could not fetch data from d_min, getting it from local dmin_instance_dict")
         if data_problem:
             values = self.global_min_instance_dict[tab]
             attribs, vals = values[0], values[1]

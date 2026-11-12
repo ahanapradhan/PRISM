@@ -69,7 +69,10 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         init_elapsed_time = 0
         if not init_was_done and fc.init.local_elapsed_time is not None:
             init_elapsed_time = fc.init.local_elapsed_time
-            self.time_profile.update_for_init(init_elapsed_time, fc.init.app_calls)
+            # App-call counts are diagnostic stats only; default to zero when an
+            # extractor (e.g. Initiator) does not track them.
+            self.time_profile.update_for_init(
+                init_elapsed_time, getattr(fc.init, "app_calls", 0) or 0)
         if fc.local_elapsed_time is not None:
             fc.local_elapsed_time = fc.local_elapsed_time - init_elapsed_time
         self.time_profile.update_for_from_clause(fc.local_elapsed_time, fc.app_calls)

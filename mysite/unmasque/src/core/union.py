@@ -27,7 +27,10 @@ class Union(AppExtractorBase):
         # from the Union/From Clause module rows.
         if not init_was_done and db.fromClause.init.local_elapsed_time is not None:
             self.init_elapsed_time = db.fromClause.init.local_elapsed_time
-            self.init_app_calls = db.fromClause.init.app_calls
+            # App-call counts are diagnostic stats only. Not every extractor
+            # tracks them (Initiator does not), and a missing counter must never
+            # break extraction.
+            self.init_app_calls = getattr(db.fromClause.init, "app_calls", 0) or 0
         self.all_relations = db.get_relations()
         self.all_sizes = db.get_all_sizes()
         self.key_lists = db.fromClause.init.global_key_lists
