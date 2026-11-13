@@ -1,0 +1,201 @@
+### TASK
+A closed Java application reads a PostgreSQL database through Hibernate and prints a report. Its source code is NOT
+available. You are given everything observable about it: the database it ran on (INPUT), the exact lines it printed
+(OUTPUT), the SQL statements Hibernate sent to the database (LOG) and the execution plans of those statements (PLANS).
+Statement parameters are bound separately and are not part of the log.
+
+Write ONE PostgreSQL SELECT statement Q such that, executed on the database described under INPUT, Q returns exactly
+the lines under OUTPUT: the same 30 rows, 3 columns, values and order. Q is the single query that the whole
+application is equivalent to on every database of this schema, not just on this one.
+
+Rules for your answer:
+  1. Q must return exactly 30 rows and 3 columns on this database. A query that returns more or fewer rows,
+     or a different number of columns, is wrong. Check this before answering.
+  2. Use only the tables and columns listed under INPUT. Do not return raw table dumps.
+  3. Values in OUTPUT are tab-separated, no header; the word NULL stands for SQL NULL.
+  4. Reproduce the row ORDER of OUTPUT exactly.
+  5. State which parts of Q you are sure of from the evidence and which are guesses.
+
+
+### INPUT: DATABASE (PostgreSQL, schema public)
+
+TABLE nation -- 25 rows
+  n_nationkey integer
+  n_name character varying
+  n_regionkey integer
+  n_comment character varying
+  first 3 rows (column order as above):
+    0 | ALGERIA | 0 | furiously regular requests. platelets affix furious
+    1 | ARGENTINA | 1 | instructions wake quickly. final deposits haggle. final, silent theodolites 
+    2 | BRAZIL | 1 | asymptotes use fluffily quickly bold instructions. slyly bold dependencies sleep carefully pending accounts
+
+TABLE region -- 5 rows
+  r_regionkey integer
+  r_name character varying
+  r_comment character varying
+  first 3 rows (column order as above):
+    0 | AFRICA | ar packages. regular excuses among the ironic requests cajole fluffily blithely final requests. furiously express p
+    1 | AMERICA | s are. furiously even pinto bea
+    2 | ASIA | c, special dependencies around 
+
+TABLE customer -- 150000 rows
+  c_custkey bigint
+  c_name character varying
+  c_address character varying
+  c_nationkey integer
+  c_phone character varying
+  c_acctbal numeric(15,2)
+  c_mktsegment character varying
+  c_comment character varying
+  first 3 rows (column order as above):
+    1 | Customer#000000001 | j5JsirBM9PsCy0O1m | 15 | 25-989-741-2988 | 711.56 | BUILDING | y final requests wake slyly quickly special accounts. blithely
+    2 | Customer#000000002 | 487LW1dovn6Q4dMVymKwwLE9OKf3QG | 13 | 23-768-687-3665 | 121.65 | AUTOMOBILE | y carefully regular foxes. slyly regular requests about the bli
+    3 | Customer#000000003 | fkRGN8nY4pkE | 1 | 11-719-748-3364 | 7498.12 | AUTOMOBILE | fully. carefully silent instructions sleep alongside of the slyly regular asymptotes. quickly regular 
+
+TABLE supplier -- 10000 rows
+  s_suppkey bigint
+  s_name character varying
+  s_address character varying
+  s_nationkey integer
+  s_phone character varying
+  s_acctbal numeric(15,2)
+  s_comment character varying
+  first 3 rows (column order as above):
+    1 | Supplier#000000001 | sdrGnXCDRcfriBvY0KL,ipCanOTyK t NN1 | 17 | 27-918-335-1736 | 5755.94 |  instructions. slyly unusual
+    2 | Supplier#000000002 | TRMhVHz3XiFuhapxucPo1 | 5 | 15-679-861-2259 | 4032.68 |  the pending packages. furiously expres
+    3 | Supplier#000000003 | BZ0kXcHUcHjx62L7CjZSql7gbWQ6RPn5X | 1 | 11-383-516-1199 | 4192.40 | ong the fluffily idle packages: bold foxes mold silent package
+
+TABLE part -- 200000 rows
+  p_partkey bigint
+  p_name character varying
+  p_mfgr character varying
+  p_brand character varying
+  p_type character varying
+  p_size integer
+  p_container character varying
+  p_retailprice numeric(15,2)
+  p_comment character varying
+  first 3 rows (column order as above):
+    1 | goldenrod lavender spring chocolate lace | Manufacturer#1 | Brand#13 | PROMO BURNISHED COPPER | 7 | JUMBO PKG | 901.00 | ironic pinto be
+    2 | blush thistle blue yellow saddle | Manufacturer#1 | Brand#13 | LARGE BRUSHED BRASS | 1 | LG CASE | 902.00 | nding, even pack
+    3 | spring green yellow purple cornsilk | Manufacturer#4 | Brand#42 | STANDARD POLISHED BRASS | 21 | WRAP CASE | 903.00 | ages. blithely fina
+
+TABLE partsupp -- 800000 rows
+  ps_partkey bigint
+  ps_suppkey bigint
+  ps_availqty bigint
+  ps_supplycost numeric(15,2)
+  ps_comment character varying
+  first 3 rows (column order as above):
+    1 | 2502 | 8076 | 993.49 | ts boost carefully ironic, regular accounts. final theodolites cajole slyly. final
+    1 | 5002 | 3956 | 337.09 |  fluffily regular multipliers? sheaves integrate slyly ideas. furiously special deposits cajole slyly against the slyly regular pinto beans. blithely pending instructions detect 
+    1 | 2 | 3325 | 771.64 | blithely regular theodolites sleep slyly across the sometimes bold dependencies. even accounts among the slyly final sauternes cajole quickly about the doggedly even platelets. carefully final
+
+TABLE orders -- 1500000 rows
+  o_orderkey bigint
+  o_custkey bigint
+  o_orderstatus character varying
+  o_totalprice numeric(15,2)
+  o_orderdate date
+  o_orderpriority character varying
+  o_clerk character varying
+  o_shippriority integer
+  o_comment character varying
+  first 3 rows (column order as above):
+    1 | 36901 | O | 173665.47 | 1996-01-02 | 5-LOW | Clerk#000000951 | 0 | ly express platelets. deposits acc
+    2 | 78002 | O | 46929.18 | 1996-12-01 | 1-URGENT | Clerk#000000880 | 0 | ve the furiously fluffy dependencies. carefully regular 
+    3 | 123314 | F | 193846.25 | 1993-10-14 | 5-LOW | Clerk#000000955 | 0 |  after the asymptotes. instructions cajole after the foxes. carefully unu
+
+TABLE lineitem -- 6001215 rows
+  l_orderkey bigint
+  l_partkey bigint
+  l_suppkey bigint
+  l_linenumber bigint
+  l_quantity numeric(15,2)
+  l_extendedprice numeric(15,2)
+  l_discount numeric(15,2)
+  l_tax numeric(15,2)
+  l_returnflag character varying
+  l_linestatus character varying
+  l_shipdate date
+  l_commitdate date
+  l_receiptdate date
+  l_shipinstruct character varying
+  l_shipmode character varying
+  l_comment character varying
+  first 3 rows (column order as above):
+    1 | 155190 | 7706 | 1 | 17.00 | 21168.23 | 0.04 | 0.02 | N | O | 1996-03-13 | 1996-02-12 | 1996-03-22 | DELIVER IN PERSON | TRUCK | to beans x-ray carefull
+    1 | 67310 | 7311 | 2 | 36.00 | 45983.16 | 0.09 | 0.06 | N | O | 1996-04-12 | 1996-02-28 | 1996-04-20 | TAKE BACK RETURN | MAIL |  according to the final foxes. qui
+    1 | 63700 | 3701 | 3 | 8.00 | 13309.60 | 0.10 | 0.02 | N | O | 1996-01-29 | 1996-03-05 | 1996-01-31 | TAKE BACK RETURN | REG AIR | ourts cajole above the furiou
+
+Distinct values of low-cardinality columns:
+  customer.c_mktsegment: AUTOMOBILE, BUILDING, FURNITURE, HOUSEHOLD, MACHINERY
+  orders.o_orderstatus: F, O, P
+  lineitem.l_shipmode: AIR, FOB, MAIL, RAIL, REG AIR, SHIP, TRUCK
+  region.r_name: AFRICA, AMERICA, ASIA, EUROPE, MIDDLE EAST
+  nation.n_name: ALGERIA, ARGENTINA, BRAZIL, CANADA, CHINA, EGYPT, ETHIOPIA, FRANCE, GERMANY, INDIA, INDONESIA, IRAN, IRAQ, JAPAN, JORDAN, KENYA, MOROCCO, MOZAMBIQUE, PERU, ROMANIA, RUSSIA, SAUDI ARABIA, UNITED KINGDOM, UNITED STATES, VIETNAM
+
+### OUTPUT: everything the application printed (30 lines, 3 tab-separated columns, no header)
+NULL	NULL	857.71
+NULL	NULL	866.90
+NULL	NULL	870.88
+NULL	NULL	875.52
+NULL	NULL	877.30
+NULL	NULL	884.52
+NULL	NULL	884.82
+NULL	NULL	885.75
+NULL	NULL	891.74
+NULL	NULL	895.39
+Supplier#000007607	ALGERIA	14993.1348000000000000
+Supplier#000009385	IRAN	14984.0136000000000000
+Supplier#000008907	ARGENTINA	14961.3600000000000000
+Supplier#000003818	VIETNAM	14920.4601000000000000
+Supplier#000007009	KENYA	14910.2250000000000000
+Supplier#000001141	CANADA	14875.9578000000000000
+Supplier#000000279	JORDAN	14849.2125000000000000
+Supplier#000001015	INDIA	14845.8500000000000000
+Supplier#000001935	ETHIOPIA	14814.4414000000000000
+Supplier#000005467	ALGERIA	14812.3080000000000000
+Supplier#000000462	ETHIOPIA	14799.0843000000000000
+Supplier#000008286	ARGENTINA	14780.3760000000000000
+Supplier#000006688	IRAQ	14661.1790000000000000
+Supplier#000002236	INDONESIA	14654.5443000000000000
+Supplier#000003456	MOZAMBIQUE	14601.3615000000000000
+Supplier#000003798	ETHIOPIA	14594.9304000000000000
+Supplier#000009584	VIETNAM	14526.5400000000000000
+Supplier#000001427	VIETNAM	14522.2104000000000000
+Supplier#000008200	EGYPT	14521.4732000000000000
+Supplier#000004999	CHINA	14521.2064000000000000
+
+### LOG: every SQL statement Hibernate sent to the database (4 statements, parameters bound separately)
+Hibernate: select * from hq_1(?)
+Hibernate: select * from hq_2(?)
+Hibernate: select * from hq_4(?, ?, ?)
+Hibernate: select * from hq_3(?)
+
+### PLANS: EXPLAIN (ANALYZE) of those statements
+# The application sends these statements with bind parameters (see sql_log.txt); plans show only the wrapper function.
+
+-- select * from hq_1(?)
+Function Scan on hq_1  (cost=0.25..10.25 rows=1000 width=41) (actual time=1.847..1.848 rows=25 loops=1)
+  Buffers: shared hit=228 read=11
+Planning Time: 0.047 ms
+Execution Time: 2.812 ms
+
+-- select * from hq_2(?)
+Function Scan on hq_2  (cost=0.25..10.25 rows=1000 width=104) (actual time=23.081..23.491 rows=13551 loops=1)
+  Buffers: shared hit=344 read=3613
+Planning Time: 0.060 ms
+Execution Time: 24.598 ms
+
+-- select * from hq_3(?)
+Function Scan on hq_3  (cost=0.25..10.25 rows=1000 width=40) (actual time=335.871..337.281 rows=47406 loops=1)
+  Buffers: shared hit=338 read=22482
+Planning Time: 0.058 ms
+Execution Time: 339.335 ms
+
+-- select * from hq_4(?, ?, ?)
+Function Scan on hq_4  (cost=0.25..10.25 rows=1000 width=72) (actual time=1038.240..1038.435 rows=6534 loops=1)
+  Buffers: shared hit=45270 read=133415
+Planning Time: 0.059 ms
+Execution Time: 1039.327 ms

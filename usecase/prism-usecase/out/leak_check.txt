@@ -1,0 +1,1 @@
+  PASS: no business constant appears in sql_log.txt or plans.txt

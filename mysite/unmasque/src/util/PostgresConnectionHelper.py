@@ -93,6 +93,14 @@ class PostgresConnectionHelper(AbstractConnectionHelper):
             # finally:
             #    cur.close()
 
+    def cus_execute_sql_many(self, cur, sql, params, logger=None):
+        if not params:
+            return
+        fixed_query = sql.replace("'None'", "NULL").rstrip().rstrip(";")
+        if logger is not None:
+            logger.debug(fixed_query)
+        cur.executemany(fixed_query, params)
+
     def execute_sql_fetchall(self, sql, logger=None):
         cur = self.get_cursor()
         if logger is not None:

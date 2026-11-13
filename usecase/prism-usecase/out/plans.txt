@@ -1,0 +1,25 @@
+# The application sends these statements with bind parameters (see sql_log.txt); plans show only the wrapper function.
+
+-- select * from hq_1(?)
+Function Scan on hq_1  (cost=0.25..10.25 rows=1000 width=41) (actual time=1.847..1.848 rows=25 loops=1)
+  Buffers: shared hit=228 read=11
+Planning Time: 0.047 ms
+Execution Time: 2.812 ms
+
+-- select * from hq_2(?)
+Function Scan on hq_2  (cost=0.25..10.25 rows=1000 width=104) (actual time=23.081..23.491 rows=13551 loops=1)
+  Buffers: shared hit=344 read=3613
+Planning Time: 0.060 ms
+Execution Time: 24.598 ms
+
+-- select * from hq_3(?)
+Function Scan on hq_3  (cost=0.25..10.25 rows=1000 width=40) (actual time=335.871..337.281 rows=47406 loops=1)
+  Buffers: shared hit=338 read=22482
+Planning Time: 0.058 ms
+Execution Time: 339.335 ms
+
+-- select * from hq_4(?, ?, ?)
+Function Scan on hq_4  (cost=0.25..10.25 rows=1000 width=72) (actual time=1038.240..1038.435 rows=6534 loops=1)
+  Buffers: shared hit=45270 read=133415
+Planning Time: 0.059 ms
+Execution Time: 1039.327 ms

@@ -39,6 +39,7 @@ class NepPipeLine(GenericPipeLine, ABC):
         nep_extractor = NEP(self.connectionHelper, genCtx)
 
         for i in range(self.NEP_CUTOFF):
+            previous_eq = eq
             self.update_state(NEP_ + RESULT_COMPARE + START)
             self.update_state(NEP_ + RESULT_COMPARE + RUNNING)
             matched = nep_minimizer.match(query, eq)
@@ -73,6 +74,12 @@ class NepPipeLine(GenericPipeLine, ABC):
                     eq = self.q_generator.updateExtractedQueryWithNEPVal(query, nep_filters)
                 self.update_state(FILTER + DONE)
                 self.time_profile.update_for_nep(nep_extractor.local_elapsed_time, nep_extractor.app_calls)
+
+            if eq == previous_eq:
+                self.logger.info("NEP extraction made no progress; stopping.")
+                break
+        else:
+            self.logger.info(f"NEP extraction reached cutoff {self.NEP_CUTOFF}.")
 
         eq = self.q_generator.rewrite_for_NEP()
         self.logger.debug("returning..", eq)

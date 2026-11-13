@@ -69,6 +69,28 @@ def sort_merge(range_values, single_values, values):
         r_counter += 1
 
 
+def merge_overlapping_ranges(range_values):
+    if not range_values:
+        return []
+    sorted_ranges = sorted(range_values, key=lambda item: item[0])
+    merged = [tuple(sorted_ranges[0])]
+    for lb, ub in sorted_ranges[1:]:
+        last_lb, last_ub = merged[-1]
+        if lb <= last_ub:
+            merged[-1] = (last_lb, max(last_ub, ub))
+        else:
+            merged.append((lb, ub))
+    return merged
+
+
+def remove_values_covered_by_ranges(single_values, range_values):
+    output = []
+    for value in single_values:
+        if not any(lb <= value <= ub for lb, ub in range_values):
+            output.append(value)
+    return output
+
+
 def update_dict(B_dict, key, val, is_ub):
     if not isinstance(key, tuple):
         return
@@ -297,7 +319,14 @@ class GenPipelineContext:
                         values.append((i_min, i_max))
                 self.__adjust_for_in_predicates(attrib, tab, values)
             else:
-                raise UnmasqueError(ERROR_007, "genPipeline_context", "Disjunction on Multiple Attributes are out of scope!")
+                details = {
+                    "column": p,
+                    "tab_attribs": tab_attribs,
+                    "unique_tab_attribs": sorted(uniq_tab_attribs),
+                }
+                raise UnmasqueError(
+                    ERROR_007, "genPipeline_context",
+                    f"Disjunction on Multiple Attributes are out of scope! Details: {details}")
 
     def __adjust_for_in_predicates(self, attrib, tab, _values):
         values = []
@@ -308,6 +337,9 @@ class GenPipelineContext:
                 single_values.append(val)
             else:
                 range_values.append(val)
+        single_values = sorted(set(single_values))
+        range_values = merge_overlapping_ranges(range_values)
+        single_values = remove_values_covered_by_ranges(single_values, range_values)
         sort_merge(range_values, single_values, values)
         in_pred = [tab, attrib, 'IN', values, values] if len(values) > 1 else [tab, attrib, '=', values, values]
         frozen_values = FrozenList(values)

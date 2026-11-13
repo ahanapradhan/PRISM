@@ -90,6 +90,16 @@ class GenerationPipeLineBase(MutationPipeLineBase):
         else:
             self.connectionHelper.execute_sql_with_params(insert_query, insert_rows)
 
+    def insert_attrib_vals_into_table_many(self, att_order, attrib_list_inner,
+                                           insert_rows, tabname_inner, insert_logger=False) -> None:
+        if not insert_rows:
+            return
+        esc_string = get_escape_string(attrib_list_inner)
+        insert_query = self.connectionHelper.queries.insert_into_tab_attribs_format(
+            att_order, esc_string, self.get_fully_qualified_table_name(tabname_inner))
+        logger = self.logger if insert_logger else None
+        self.connectionHelper.execute_sql_many(insert_query, insert_rows, logger)
+
     def update_attrib_in_table(self, attrib, value, tabname) -> None:
         update_query = self.connectionHelper.queries.update_tab_attrib_with_value(
             self.get_fully_qualified_table_name(tabname), attrib, value)

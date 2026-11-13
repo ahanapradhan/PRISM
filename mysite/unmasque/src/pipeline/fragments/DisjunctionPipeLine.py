@@ -15,6 +15,8 @@ from ....src.util.constants import FILTER, INEQUALITY, DONE, RUNNING, START, EQU
     SAMPLING, RESTORE_DB, ERROR
 from ....src.util.utils import get_format, get_val_plus_delta
 from ....src.util.error_handling import UnmasqueError
+from ....src.util.error_codes import ERROR_008
+from ....src.pipeline.abstract.SchemaSanitizer import SchemaSanitizer
 
 
 def get_eq_filters(arithmetics):
@@ -31,6 +33,7 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         self.db_restorer = None
         self.global_min_instance_dict = None
         self.key_lists = None
+        self.OR_CUTOFF = 1000
 
     def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None):
         self.update_state(RESTORE_DB + START)
@@ -175,41 +178,149 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
 
     def _extract_disjunction(self, init_predicates, core_relations, query, time_profile):  # for once
         self.or_predicates = []
-        curr_eq_predicates = copy.deepcopy(init_predicates)
-        all_eq_predicates = [curr_eq_predicates]
-        ids = list(range(len(curr_eq_predicates)))
+        columns = self.__make_disjunction_columns(init_predicates)
         if self.connectionHelper.config.detect_or:
             try:
-                time_profile = self.__run_extraction_loop(all_eq_predicates, core_relations, ids, query, time_profile)
+                time_profile = self.__run_extraction_loop(columns, core_relations, query, time_profile)
+            except UnmasqueError as e:
+                self.__restore_db(core_relations)
+                self.update_state(ERROR)
+                self.logger.error("Error in disjunction loop. ", str(e))
+                raise
             except Exception as e:
                 self.update_state(ERROR)
                 self.logger.error("Error in disjunction loop. ", str(e))
                 return False, time_profile
-        self.or_predicates = list(zip(*all_eq_predicates))
+        self.or_predicates = [tuple(column) for column in columns.values()]
         return True, time_profile
 
-    def __run_extraction_loop(self, all_eq_predicates, core_relations, ids, query, time_profile):
-        while True:
-            or_eq_predicates = []
-            for i in ids:
-                in_candidates = [copy.deepcopy(em[i]) for em in all_eq_predicates]
+    @staticmethod
+    def __make_disjunction_columns(init_predicates):
+        columns = {}
+        occurrences = {}
+        for pred in init_predicates:
+            tab_attrib = (pred[0], pred[1])
+            occurrence = occurrences.get(tab_attrib, 0)
+            occurrences[tab_attrib] = occurrence + 1
+            columns[(pred[0], pred[1], occurrence)] = [copy.deepcopy(pred)]
+        return columns
+
+    @staticmethod
+    def __get_new_attribute_columns(predicates, known_tab_attribs, core_relations):
+        discovered = []
+        for pred in predicates:
+            if not pred or len(pred) < 3:
+                continue
+            tab_attrib = (pred[0], pred[1])
+            if tab_attrib in known_tab_attribs or pred[0] not in core_relations:
+                continue
+            known_tab_attribs.add(tab_attrib)
+            discovered.append(((pred[0], pred[1], 0), copy.deepcopy(pred)))
+        return discovered
+
+    def __run_extraction_loop(self, columns, core_relations, query, time_profile):
+        converged = False
+        for _ in range(self.OR_CUTOFF):
+            additions = {}
+            added_new_column = False
+            known_tab_attribs = {(key[0], key[1]) for key in columns}
+            for key, column in list(columns.items()):
+                reference = column[0]
+                in_candidates = copy.deepcopy(column)
                 self.logger.debug("Checking OR predicate of ", in_candidates)
                 if not len(in_candidates[-1]):
-                    or_eq_predicates.append(tuple())
                     continue
 
                 restore_details = self.__get_OR_db_restoration_details(core_relations, in_candidates)
                 self.logger.debug(restore_details)
                 check, time_profile = self._mutation_pipeline(core_relations, query, time_profile, restore_details)
                 if not check or not self.__get_predicates_in_action():
-                    or_eq_predicates.append(tuple())
-                else:
-                    or_eq_predicates.append(self.__get_predicates_in_action()[i])
-                self.logger.debug("new or predicates...", all_eq_predicates, or_eq_predicates)
-            if all(element == tuple() for element in or_eq_predicates):
+                    continue
+                action_predicates = self.__get_predicates_in_action()
+                new_predicate = self.__find_matching_predicate(action_predicates, reference)
+                if new_predicate and self.__is_new_disjunct(new_predicate, in_candidates):
+                    additions[key] = new_predicate
+                for new_key, new_predicate in self.__get_new_attribute_columns(
+                        action_predicates, known_tab_attribs, core_relations):
+                    if new_key not in columns:
+                        columns[new_key] = [new_predicate]
+                        added_new_column = True
+                self.logger.debug("new or predicates...", columns, additions)
+            if not additions and not added_new_column:
+                converged = True
                 break
-            all_eq_predicates.append(or_eq_predicates)
+            for key, new_predicate in additions.items():
+                columns[key].append(new_predicate)
+        if not converged:
+            raise UnmasqueError(ERROR_008, "DisjunctionPipeLine",
+                                f"Could not determine all OR branches within {self.OR_CUTOFF} iterations.")
         return time_profile
+
+    @staticmethod
+    def __find_matching_predicate(predicates, reference):
+        if not reference:
+            return tuple()
+        ref_key = (reference[0], reference[1])
+        candidates = [pred for pred in predicates if (pred[0], pred[1]) == ref_key]
+        if not candidates:
+            return tuple()
+        for pred in candidates:
+            if len(pred) > 4 and len(reference) > 4 \
+                    and pred[2] == reference[2] and pred[3] == reference[3] and pred[4] == reference[4]:
+                return pred
+        for pred in candidates:
+            if len(pred) > 2 and pred[2] == reference[2]:
+                return pred
+        return candidates[0]
+
+    @staticmethod
+    def __get_interval(predicate):
+        if not predicate or len(predicate) < 5:
+            return None
+        if str(predicate[2]).lower() == 'like':
+            return None
+        return predicate[3], predicate[4]
+
+    @staticmethod
+    def __intervals_overlap(first, second):
+        first_lb, first_ub = first
+        second_lb, second_ub = second
+        try:
+            if first_ub is not None and second_lb is not None and first_ub < second_lb:
+                return False
+            if second_ub is not None and first_lb is not None and second_ub < first_lb:
+                return False
+        except TypeError:
+            return True
+        return True
+
+    def __is_new_disjunct(self, new_predicate, in_candidates):
+        new_interval = self.__get_interval(new_predicate)
+        for candidate in in_candidates:
+            if not candidate or (candidate[0], candidate[1]) != (new_predicate[0], new_predicate[1]):
+                continue
+            candidate_interval = self.__get_interval(candidate)
+            if new_interval is None or candidate_interval is None:
+                if new_predicate == candidate:
+                    return False
+                continue
+            if self.__intervals_overlap(new_interval, candidate_interval):
+                return False
+        return True
+
+    def __restore_db(self, core_relations):
+        relations = getattr(self, 'all_relations', None) or core_relations
+        try:
+            self.connectionHelper.rollback_transaction()
+        except Exception:
+            pass
+        try:
+            sanitizer = SchemaSanitizer(self.connectionHelper, self.all_sizes)
+            sanitizer.set_all_relations(list(relations))
+            sanitizer.sanitize()
+            self.logger.info("Database restored after disjunction extraction error.")
+        except Exception as e:
+            self.logger.error("Could not restore the database after disjunction extraction error. ", str(e))
 
     def __get_OR_db_restoration_details(self, core_relations, in_candidates):
         restore_details = []

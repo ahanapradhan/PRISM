@@ -92,6 +92,10 @@ class AbstractConnectionHelper:
         cur = self.get_cursor()
         self.cus_execute_sql_with_params(cur, sql, params, logger)
 
+    def execute_sql_many(self, sql, params, logger=None):
+        cur = self.get_cursor()
+        self.cus_execute_sql_many(cur, sql, params, logger)
+
     def execute_sqls_with_DictCursor(self, sqls, logger=None):
         cur = self.get_DictCursor()
         self.cus_execute_sqls(cur, sqls, logger)
@@ -125,6 +129,10 @@ class AbstractConnectionHelper:
 
     @abstractmethod
     def cus_execute_sql_with_params(self, cur, sql, params, logger=None):
+        pass
+
+    @abstractmethod
+    def cus_execute_sql_many(self, cur, sql, params, logger=None):
         pass
 
     @abstractmethod

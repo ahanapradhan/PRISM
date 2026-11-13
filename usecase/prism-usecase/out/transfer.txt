@@ -1,0 +1,6 @@
+stmt    base_table    rows_sent   table_rows  pct_rows approx_MB_sent       table_MB
+hq_1    nation               25           25  100.000%           0.00           0.01
+hq_2    customer          13551       150000    9.034%           0.85          28.69
+hq_3    orders            47406      1500000    3.160%           1.80         208.69
+hq_4    lineitem           6534      6001215    0.109%           0.37         864.12
+TOTAL   approx 3.02 MB sent (row payload) vs 1101.51 MB for plain scans of the four base tables (heap size): 0.274%
