@@ -26,14 +26,12 @@ class Initiator(Base):
         self.global_pk_dict = {}
         self.error = None
         self.downer = None
-        self.backup_done = False
 
     def reset(self):
         self.global_key_lists = [[]]
         self.global_pk_dict = {}
         self.all_relations = []
         self.error = None
-        self.backup_done = False
 
     def verify_support_files(self):
         check_pkfk = os.path.isfile(self.pkfk_file_path)
@@ -66,9 +64,8 @@ class Initiator(Base):
         self.logger.info("loaded pk-fk..", all_pkfk)
         self._create_working_schema()
         self.logger.info(f"Working schema set to {self.connectionHelper.config.schema}")
-        # Backup intentionally happens after from-clause extraction, when the
-        # core relations are known. FromClause.take_backup(core_relations) is
-        # called by FromClause.doActualJob() once probing has completed.
+        if not self.connectionHelper.config.use_cs2 and not self.connectionHelper.config.scale_down:
+            self.take_backup()
         self.__get_rows_in_tables()
         check = self.__scale_down(args)
         return check

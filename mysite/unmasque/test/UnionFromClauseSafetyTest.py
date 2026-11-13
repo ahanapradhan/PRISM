@@ -92,7 +92,6 @@ def _build_union_from_clause(tables):
     ufc.comtabs = set()
     ufc.to_nullify = set()
     ufc.nullified = set()
-    ufc._transaction_open = False
     ufc.extractor_name = 'Union_fc'
     ufc.dirty_name = '_unmasque_Union_fc'
     ufc.logger = _NullLogger()
@@ -131,7 +130,7 @@ def test_revert_is_idempotent():
     assert _dirty('nation') not in helper.tables
 
 
-def test_failed_revert_rolls_back_and_restores_original_data():
+def test_failed_revert_rolls_back_and_keeps_backup_for_retry():
     ufc, helper = _build_union_from_clause({'fresh.nation': {'real-data'}})
     ufc.nullify_except({'nation'})
 
@@ -139,19 +138,11 @@ def test_failed_revert_rolls_back_and_restores_original_data():
     with pytest.raises(RuntimeError):
         ufc.revert_nullify()
 
-    # The nullify transaction was never committed, so rollback restores the
-    # original table and removes the temporary backup.
-    assert helper.tables['fresh.nation'] == {'real-data'}
-    assert _dirty('nation') not in helper.tables
-    assert ufc.nullified == set()
+    assert 'fresh.nation' in helper.tables
+    assert helper.tables[_dirty('nation')] == {'real-data'}
 
-
-def test_rollback_before_revert_leaves_user_tables_untouched():
-    ufc, helper = _build_union_from_clause({'fresh.nation': {'real-data'}})
-
-    ufc.nullify_except({'nation'})
-    # Simulate a crash/connection loss before revert: no commit happened.
-    ufc.abort_nullify()
+    helper.fail_on = set()
+    ufc.revert_nullify()
 
     assert helper.tables['fresh.nation'] == {'real-data'}
     assert _dirty('nation') not in helper.tables

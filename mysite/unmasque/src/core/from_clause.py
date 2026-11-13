@@ -139,7 +139,6 @@ class FromClause(AppExtractorBase):
             self.get_core_relations_by_error(query)
         if len(self.core_relations) == 0 and not is_common_table_check:
             raise UnmasqueError(ERROR_006, "from_clause", {})
-
         return self.core_relations
 
     def get_key_lists(self):
