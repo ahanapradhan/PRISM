@@ -307,7 +307,7 @@ WHERE c_phone LIKE '27-%'
   AND o_orderkey = l_orderkey
 GROUP BY c_name, o_orderdate, o_totalprice
 ORDER BY o_orderdate, o_totalprice DESC
-LIMIT 100;""",False, False, False, False, False),
+LIMIT 100;""",False, True, True, True, True),
                      TestQuery("MQ21", """SELECT s_name, COUNT(*) AS numwait
 FROM supplier, lineitem l1, orders, nation
 WHERE s_suppkey = l1.l_suppkey 
