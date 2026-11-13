@@ -85,6 +85,7 @@ class SchemaSanitizer:
             )
 
     def take_backup(self, relations=None, sizes=None):
+        self._create_working_schema()
         tables = list(self.all_relations if relations is None else relations)
         if not tables:
             return

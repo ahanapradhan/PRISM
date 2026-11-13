@@ -24,8 +24,10 @@ class Minimizer(AppExtractorBase, ABC):
     def getCoreSizes(self):
         sizes = {}
         for table in self.all_relations:
-            sizes[table] = self.connectionHelper.execute_sql_fetchone_0(
+            count = self.connectionHelper.execute_sql_fetchone_0(
                 self.connectionHelper.queries.get_row_count(self.get_fully_qualified_table_name(table)))
+            if count is not None:
+                sizes[table] = count
         self.logger.debug(sizes)
         return sizes
 
