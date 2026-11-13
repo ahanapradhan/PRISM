@@ -1,5 +1,15 @@
 from .abstract.AppExtractorBase import AppExtractorBase
 from .abstract.abstractConnection import AbstractConnectionHelper
+from ..util.native_copy import (
+    NativeCopyError,
+    default_index_threads,
+    default_threads,
+    run_native_copy,
+)
+
+# Predicates that mean "copy the whole table". PRISM uses the literal string
+# ``true`` when a disjunction has no falsifying predicate.
+_FULL_WHERE_VALUES = {"", "true", "(true)"}
 
 
 class DbRestorer(AppExtractorBase):
@@ -41,42 +51,145 @@ class DbRestorer(AppExtractorBase):
         self.restore_one_table_where(table, where)
         self.drop_r_tables()
 
+    @staticmethod
+    def _is_full_where(where):
+        return where is None or str(where).strip().lower() in _FULL_WHERE_VALUES
+
+    def _restore_native_batch(self, pairs):
+        """Restore a group of tables with the native threaded helper.
+
+        Full-table restores use ``like_insert`` (the same shape as
+        ``SchemaSanitizer.restore_one_table``); partial restores use ``ctas``
+        (the same shape as ``restore_one_table_where``). Predicates are passed
+        per table so both kinds can be batched independently.
+        """
+        try:
+            for tab, _ in pairs:
+                self.drop_derived_relations(tab)
+            self._end_open_transaction()
+
+            full = [tab for tab, where in pairs if self._is_full_where(where)]
+            partial = [(tab, where) for tab, where in pairs
+                       if not self._is_full_where(where)]
+
+            if full:
+                result = run_native_copy(
+                    self.connectionHelper.config,
+                    source_schema=self.connectionHelper.config.user_schema,
+                    dest_schema=self.connectionHelper.config.schema,
+                    tables=full,
+                    sql="like_insert",
+                    rows=self._known_sizes(full, self.all_sizes),
+                    max_threads=default_threads(),
+                    index_threads=default_index_threads(),
+                    mode="restore",
+                    logger=self.logger,
+                )
+                self._log_native_result("restore", result)
+
+            if partial:
+                result = run_native_copy(
+                    self.connectionHelper.config,
+                    source_schema=self.connectionHelper.config.user_schema,
+                    dest_schema=self.connectionHelper.config.schema,
+                    tables=[tab for tab, _ in partial],
+                    sql="ctas",
+                    wheres=dict(partial),
+                    max_threads=default_threads(),
+                    index_threads=default_index_threads(),
+                    mode="restore",
+                    logger=self.logger,
+                )
+                self._log_native_result("restore", result)
+
+            for tab, _ in pairs:
+                self.__update_current_sizes(tab)
+            self.drop_r_tables()
+            return True
+        except NativeCopyError as error:
+            self.logger.error(f"Native restore failed: {error}")
+            return False
+
     def doActualJob(self, args=None):
         self.logger.debug("core relations: ", self.core_relations, " all sizes: ", self.all_sizes)
         tabs_wheres = self.extract_params_from_args(args)
         if tabs_wheres is None:
             to_restore = self.core_relations if (self.core_relations is not None and len(self.core_relations)) \
                 else self.relations
-            for tab in to_restore:
-                if tab not in self.last_restored_size.keys():
-                    self.__update_current_sizes(tab)
-                if self.last_restored_size[tab] == self.all_sizes[tab]:
-                    self.logger.info("No need to restore table")
-                else:
-                    row_count = self.restore_table_and_confirm(tab)
-                    if not row_count:
-                        return False
+            pairs = [(tab, None) for tab in to_restore]
         else:
             self.logger.debug("All sizes:", self.all_sizes)
             self.logger.debug("Current sizes:", self.last_restored_size)
-
             self.logger.debug(tabs_wheres)
-            for i, entry in enumerate(tabs_wheres):
-                tab, where = entry[0], entry[1]
-                if tab not in self.last_restored_size.keys():
-                    self.__update_current_sizes(tab)
-                if where == 'true' and self.last_restored_size[tab] == self.all_sizes[tab]:
-                    self.logger.info("No need to restore table")
-                else:
-                    check = self.restore_table_and_confirm(tab, where)
-                    if not check:
-                        return False
+            pairs = [(entry[0], entry[1]) for entry in tabs_wheres]
+
+        pending = []
+        for tab, where in pairs:
+            if tab not in self.last_restored_size.keys():
+                self.__update_current_sizes(tab)
+            if self._is_full_where(where) and \
+                    self.last_restored_size.get(tab) == self.all_sizes.get(tab):
+                self.logger.info("No need to restore table")
+            else:
+                pending.append((tab, where))
+
+        if not pending:
+            return True
+
+        if self._native_copy_enabled():
+            if self._restore_native_batch(pending):
+                return True
+            self.logger.error("Falling back to Python restore for all pending tables.")
+
+        for tab, where in pending:
+            check = self.restore_table_and_confirm(tab, where)
+            if not check:
+                return False
         return True
 
     def restore_table_and_confirm(self, tab, where=None):
+        full = self._is_full_where(where)
+        if self._native_copy_enabled():
+            try:
+                self.drop_derived_relations(tab)
+                self._end_open_transaction()
+                if full:
+                    result = run_native_copy(
+                        self.connectionHelper.config,
+                        source_schema=self.connectionHelper.config.user_schema,
+                        dest_schema=self.connectionHelper.config.schema,
+                        tables=[tab],
+                        sql="like_insert",
+                        rows=self._known_sizes([tab], self.all_sizes),
+                        max_threads=default_threads(),
+                        index_threads=default_index_threads(),
+                        mode="restore",
+                        logger=self.logger,
+                    )
+                else:
+                    result = run_native_copy(
+                        self.connectionHelper.config,
+                        source_schema=self.connectionHelper.config.user_schema,
+                        dest_schema=self.connectionHelper.config.schema,
+                        tables=[tab],
+                        sql="ctas",
+                        wheres={tab: where},
+                        max_threads=default_threads(),
+                        index_threads=default_index_threads(),
+                        mode="restore",
+                        logger=self.logger,
+                    )
+                self._log_native_result("restore", result)
+                row_count = self.__update_current_sizes(tab)
+                self.drop_r_tables()
+                return row_count
+            except NativeCopyError as error:
+                self.logger.error(
+                    f"Native restore of {tab} failed, falling back to Python copy: {error}"
+                )
         try:
-            if where is None:
-                self.sanitize_one_table(tab)
+            if full:
+                self.sanitize_one_table(tab, use_native=False)
             else:
                 self.sanitize_one_table_where(tab, where)
             row_count = self.__update_current_sizes(tab)

@@ -2,6 +2,13 @@ import copy
 
 from ...util.Log import Log
 from ...util.constants import UNMASQUE
+from ...util.native_copy import (
+    NativeCopyError,
+    default_index_threads,
+    default_threads,
+    native_copy_available,
+    run_native_copy,
+)
 from ....src.core.abstract.abstractConnection import AbstractConnectionHelper
 from typing import List
 
@@ -33,16 +40,93 @@ class SchemaSanitizer:
     def set_all_relations(self, relations: List[str]):
         self.all_relations.extend(copy.copy(relations))
 
-    def take_backup(self):
-        tables = self.all_relations
+    def _native_copy_enabled(self):
+        # Mock/test connection helpers do not expose a complete libpq config,
+        # so native_copy_available() rejects them and the Python path stays in
+        # use even when the binary happens to be built on this machine.
+        return native_copy_available(getattr(self.connectionHelper, "config", None))
+
+    def _end_open_transaction(self):
+        """Release locks held by this connection before a native worker runs.
+
+        Native workers use their own libpq connections. If the planning
+        connection still has an open transaction, its table locks can block the
+        native DROP/CREATE/INSERT statements indefinitely.
+        """
+        try:
+            self.connectionHelper.commit_transaction()
+        except Exception:
+            try:
+                self.connectionHelper.rollback_transaction()
+            except Exception:
+                pass
+
+    def _known_sizes(self, tables, sizes=None):
+        sizes = self.all_sizes if sizes is None else sizes
+        known = {}
         for table in tables:
-            self.backup_one_table(table)
+            value = sizes.get(table)
+            if isinstance(value, int) and value >= 0:
+                known[table] = value
+        return known or None
+
+    def _log_native_result(self, action, result):
+        self.logger.debug(
+            f"Native {action}: {len(result.tables)} table(s) in "
+            f"{result.total_seconds:.3f}s (copy={result.copy_seconds:.3f}s, "
+            f"index={result.index_seconds:.3f}s)"
+        )
+        for index in result.index_failures:
+            # Index failures are intentionally non-fatal: a source table may
+            # have no usable index definition.
+            self.logger.info(
+                f"Native {action} index skipped for {index.table}: "
+                f"{index.error or 'index build failed'}"
+            )
+
+    def take_backup(self, relations=None, sizes=None):
+        tables = list(self.all_relations if relations is None else relations)
+        if not tables:
+            return
+        sizes = self.all_sizes if sizes is None else sizes
+
+        if self._native_copy_enabled():
+            try:
+                if self.connectionHelper.config.use_index:
+                    for table in tables:
+                        self.__create_tab_indexes(table)
+                for table in tables:
+                    self.drop_derived_relations(table)
+                self._end_open_transaction()
+                result = run_native_copy(
+                    self.connectionHelper.config,
+                    source_schema=self.connectionHelper.config.user_schema,
+                    dest_schema=self.connectionHelper.config.schema,
+                    tables=tables,
+                    sql="like_insert",
+                    rows=self._known_sizes(tables, sizes),
+                    max_threads=default_threads(),
+                    index_threads=default_index_threads(),
+                    logger=self.logger,
+                )
+                self._log_native_result("backup", result)
+                return
+            except NativeCopyError as error:
+                self.logger.error(
+                    f"Native backup failed, falling back to Python copy: {error}"
+                )
+
+        for table in tables:
+            self.backup_one_table(table, use_native=False)
 
     def sanitize(self):
         self.connectionHelper.begin_transaction()
         tables = self.all_relations  # self.connectionHelper.get_all_tables_for_restore()
         for table in tables:
-            self.sanitize_one_table(table)
+            # This method intentionally keeps all restores in the caller's
+            # transaction, so native workers (separate connections) cannot join
+            # it. Keep this path on the Python copy implementation.
+            self.sanitize_one_table(table, use_native=False)
         self.connectionHelper.commit_transaction()
 
     def restore_db_finally(self):
@@ -54,8 +138,29 @@ class SchemaSanitizer:
         """ This method is called only when UNMASQUE no more needs its working schema"""
         self._create_working_schema()
 
-    def restore_one_table(self, table):
+    def restore_one_table(self, table, use_native=True):
         self.drop_derived_relations(table)
+        if use_native and self._native_copy_enabled():
+            try:
+                self._end_open_transaction()
+                result = run_native_copy(
+                    self.connectionHelper.config,
+                    source_schema=self.connectionHelper.config.user_schema,
+                    dest_schema=self.connectionHelper.config.schema,
+                    tables=[table],
+                    sql="like_insert",
+                    rows=self._known_sizes([table]),
+                    max_threads=default_threads(),
+                    index_threads=default_index_threads(),
+                    mode="restore",
+                    logger=self.logger,
+                )
+                self._log_native_result("restore", result)
+                return
+            except NativeCopyError as error:
+                self.logger.error(
+                    f"Native restore of {table} failed, falling back to Python copy: {error}"
+                )
         drop_fn = self.get_drop_fn(table)
         f_table = self.get_fully_qualified_table_name(table)
         backup_name = self.get_original_table_name(table)
@@ -97,8 +202,33 @@ class SchemaSanitizer:
         for col in cols:
             self.__create_col_idx_if_not_exists(tab, col)
 
-    def backup_one_table(self, table):
+    def backup_one_table(self, table, use_native=True):
         self.logger.debug(f"Backing up {table}...")
+        if use_native and self._native_copy_enabled():
+            try:
+                if self.connectionHelper.config.use_index:
+                    self.__create_tab_indexes(table)
+                self.drop_derived_relations(table)
+                self._end_open_transaction()
+                result = run_native_copy(
+                    self.connectionHelper.config,
+                    source_schema=self.connectionHelper.config.user_schema,
+                    dest_schema=self.connectionHelper.config.schema,
+                    tables=[table],
+                    sql="like_insert",
+                    rows=self._known_sizes([table]),
+                    max_threads=default_threads(),
+                    index_threads=default_index_threads(),
+                    mode="backup",
+                    logger=self.logger,
+                )
+                self._log_native_result("backup", result)
+                self.logger.debug(f"... done")
+                return
+            except NativeCopyError as error:
+                self.logger.error(
+                    f"Native backup of {table} failed, falling back to Python copy: {error}"
+                )
         self.connectionHelper.begin_transaction()
         self.drop_derived_relations(table)
         working_table = self.get_fully_qualified_table_name(table)
@@ -117,8 +247,8 @@ class SchemaSanitizer:
             [self.connectionHelper.queries.drop_view(self.get_fully_qualified_table_name("r_e")),
              self.connectionHelper.queries.drop_table(self.get_fully_qualified_table_name("r_h"))])
 
-    def sanitize_one_table(self, table):
-        self.restore_one_table(table)
+    def sanitize_one_table(self, table, use_native=True):
+        self.restore_one_table(table, use_native=use_native)
         self.drop_r_tables()
 
     def get_drop_fn(self, table):
