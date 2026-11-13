@@ -48,6 +48,8 @@ class PostgresConnectionHelper(AbstractConnectionHelper):
         self.paramString = f"dbname={self.config.dbname} user={self.config.user} password={self.config.password} " \
                            f"host={self.config.host} port={self.config.port}"
         self.queries = PostgresQueries()
+        if self.config is not None:
+            self.queries.set_schema(self.config.schema)
         self.config.config_loaded = True
 
     def form_query(self, selections, wheres, schema):
