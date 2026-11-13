@@ -14,7 +14,7 @@ class ScaleDown(Cs2):
         self.enabled = self.connectionHelper.config.scale_down
         self.seed_sample_size_per = self.seed_sample_size_per * pow(self.sample_per_multiplier,
                                                                     connectionHelper.config.scale_retry)
-        print(f"seed_sample_size_per {self.seed_sample_size_per}")
+        # print(f"seed_sample_size_per {self.seed_sample_size_per}")
 
     def extract_params_from_args(self, args):
         return args[0]

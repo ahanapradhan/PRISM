@@ -28,8 +28,7 @@ class ResultComparator(Comparator):
             self.r_e, self.get_fully_qualified_table_name(self.r_e)).rstrip().rstrip(';')
         query_r_h = self.connectionHelper.queries.hashtext_query(
             self.r_h, self.get_fully_qualified_table_name(self.r_h)).rstrip().rstrip(';')
-        from_clause = " from dual" if self.connectionHelper.config.database == "oracle" else ""
-        row = self.connectionHelper.execute_sql_fetchone(f"select ({query_r_e}), ({query_r_h}){from_clause};")
+        row = self.connectionHelper.execute_sql_fetchone(f"select ({query_r_e}), ({query_r_h});")
         if row is None:
             return None, None
         return row[0], row[1]

@@ -45,7 +45,7 @@ class TPCHRestore:
         self.conn.begin_transaction()
         for tab in self.relations:
             self.conn.execute_sql(
-                [f"create table if not exists {self.conn.config.schema}.{tab} "
+                [f"create unlogged table if not exists {self.conn.config.schema}.{tab} "
                  f"as select * from {self.backup_schema}.{tab};",
                  f"ALTER TABLE {self.conn.config.schema}.{tab} SET (autovacuum_enabled = false);"], self.logger)
         self.conn.commit_transaction()

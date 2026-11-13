@@ -1,5 +1,4 @@
 from .PostgresConnectionHelper import PostgresConnectionHelper
-from .Oracle_connectionHelper import OracleConnectionHelper
 from .configParser import Config
 
 
@@ -25,7 +24,6 @@ class ConnectionHelperFactory:
 
     def createConnectionHelper(self, config=None, **kwargs):
         self.config = Config() if config is None else config
-        if self.config.database == "postgres":
-            return PostgresConnectionHelper(self.config, **kwargs)
-        elif self.config.database == "oracle":
-            return OracleConnectionHelper(self.config, **kwargs)
+        if self.config.database != "postgres":
+            raise ValueError(f"Unsupported database: {self.config.database!r}")
+        return PostgresConnectionHelper(self.config, **kwargs)

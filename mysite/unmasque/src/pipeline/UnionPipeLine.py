@@ -2,7 +2,6 @@ import datetime
 import time
 
 from .OuterJoinPipeLine import OuterJoinPipeLine
-from .abstract.SchemaSanitizer import SchemaSanitizer
 from ..core.union import Union
 from ..util.constants import UNION, START, DONE, RUNNING, WRONG, FROM_CLAUSE, ERROR
 
@@ -23,11 +22,14 @@ class UnionPipeLine(OuterJoinPipeLine):
         self.connectionHelper.closeConnection()
 
         self.info[UNION] = [list(ele) for ele in p]
-        print(f"Now end {str(datetime.datetime.now().time())}")
         self.__update_time_profile(union, union_profile)
         self.core_relations = [item for subset in p for item in subset]
         self.all_relations = union.all_relations
         self.all_sizes = union.all_sizes
+        # all_sizes is a shared mutable dict: CS2/ViewMinimizer rewrite it with
+        # minimized row counts. Keep the pristine user-schema sizes so every
+        # branch starts from the true table sizes.
+        original_sizes = dict(self.all_sizes)
         self.key_lists = union.key_lists
         self.logger.debug(f"relations, {self.all_relations} all sizes, {self.all_sizes}, key list: {self.key_lists}")
         u_eq = []
@@ -39,13 +41,18 @@ class UnionPipeLine(OuterJoinPipeLine):
             self.logger.debug(core_relations)
             self.info[FROM_CLAUSE] = core_relations
 
+            # Reset to the pristine sizes. Without this, a previous branch's
+            # minimized size makes DbRestorer's size-equality check wrongly
+            # skip the restore (ERROR_001: query gives non-populated result).
+            self.all_sizes.clear()
+            self.all_sizes.update(original_sizes)
+
             nullify = set(self.all_relations).difference(core_relations)
 
             self.connectionHelper.connectUsingParams()
             self.__nullify_relations(nullify)
             eq = self._after_from_clause_extract(query, core_relations)
             self.__revert_nullifications(nullify)
-            self.__restore_core_relations(core_relations)
             self.q_generator.reset()
             self.connectionHelper.closeConnection()
 
@@ -76,7 +83,11 @@ class UnionPipeLine(OuterJoinPipeLine):
 
     def __update_time_profile(self, union, union_time):
         duration, app_calls = union_time[0], union_time[1]
-        self.time_profile.update_for_from_clause(union.local_elapsed_time - duration, union.app_calls - app_calls)
+        init_time = getattr(union, "init_elapsed_time", 0) or 0
+        if init_time:
+            self.time_profile.update_for_init(init_time, getattr(union, "init_app_calls", 0) or 0)
+        self.time_profile.update_for_from_clause(
+            union.local_elapsed_time - duration - init_time, union.app_calls - app_calls)
         self.time_profile.update_for_union(duration, app_calls)
 
     def __nullify_relations(self, relations):
@@ -105,12 +116,3 @@ class UnionPipeLine(OuterJoinPipeLine):
             self.connectionHelper.commit_transaction()
             self.all_sizes[tab] = self.connectionHelper.execute_sql_fetchone_0(
                 self.connectionHelper.queries.get_row_count(f_tab), self.logger)
-
-    def __restore_core_relations(self, relations):
-        sanitizer = SchemaSanitizer(self.connectionHelper, self.all_sizes)
-        sanitizer.set_all_relations(list(relations))
-        sanitizer.sanitize()
-        for tab in relations:
-            self.all_sizes[tab] = self.connectionHelper.execute_sql_fetchone_0(
-                self.connectionHelper.queries.get_row_count(
-                    sanitizer.get_fully_qualified_table_name(tab)), self.logger)

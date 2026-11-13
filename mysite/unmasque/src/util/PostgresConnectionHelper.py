@@ -48,6 +48,8 @@ class PostgresConnectionHelper(AbstractConnectionHelper):
         self.paramString = f"dbname={self.config.dbname} user={self.config.user} password={self.config.password} " \
                            f"host={self.config.host} port={self.config.port}"
         self.queries = PostgresQueries()
+        if self.config is not None:
+            self.queries.set_schema(self.config.schema)
         self.config.config_loaded = True
 
     def form_query(self, selections, wheres, schema):
@@ -92,14 +94,6 @@ class PostgresConnectionHelper(AbstractConnectionHelper):
                     logger.error(str(e))
             # finally:
             #    cur.close()
-
-    def cus_execute_sql_many(self, cur, sql, params, logger=None):
-        if not params:
-            return
-        fixed_query = sql.replace("'None'", "NULL").rstrip().rstrip(";")
-        if logger is not None:
-            logger.debug(fixed_query)
-        cur.executemany(fixed_query, params)
 
     def execute_sql_fetchall(self, sql, logger=None):
         cur = self.get_cursor()

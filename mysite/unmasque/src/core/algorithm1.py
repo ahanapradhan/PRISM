@@ -246,9 +246,19 @@ def construct_pretty_print_string(Partials):
 
 def nullify_and_runQuery(QH, db, s):
     db.nullify_except(s)
-    Res = db.run_query(QH)
-    db.revert_nullify()
-    return Res
+    try:
+        return db.run_query(QH)
+    except Exception:
+        # The nullify renames are still uncommitted. Rolling back is both the
+        # fastest and safest restore: the user tables never lose their data.
+        abort = getattr(db, "abort_nullify", None)
+        if abort is not None:
+            abort()
+        else:
+            db.revert_nullify()
+        raise
+    else:
+        db.revert_nullify()
 
 
 def init(db, QH):

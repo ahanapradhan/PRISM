@@ -23,14 +23,24 @@ class ViewMinimizer(Minimizer):
 
     def __init__(self, connectionHelper,
                  core_relations, all_sizes,
-                 sampling_status):
+                 sampling_status,
+                 expect_populated=True):
         super().__init__(connectionHelper, core_relations, all_sizes, "View_Minimizer")
         self.cs2_passed = sampling_status
         self.global_min_instance_dict = {}
+        # False means this minimizer is running against a deliberately
+        # falsified OR probe, where an empty result is expected.
+        self.expect_populated = expect_populated
 
     def doActualJob(self, args=None):
         query = self.extract_params_from_args(args)
-        if not self.sanity_check(query):
+        if not self.sanity_check(query, self.expect_populated):
+            if not self.expect_populated:
+                # The OR probe falsified the predicates, so a zero-row result
+                # simply means the candidate has no disjunct. Do not raise
+                # ERROR_001 for an intentionally empty working schema.
+                self.logger.info("No disjunct exists; the falsified OR probe returned no rows.")
+                return False
             self.logger.error(" Original database is not giving populated result!")
             raise UnmasqueError(ERROR_001, "view_minimizer", "")
         return self.reduce_Database_Instance(query, True) if self.cs2_passed \

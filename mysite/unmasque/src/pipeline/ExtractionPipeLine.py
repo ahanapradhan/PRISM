@@ -59,9 +59,22 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         fc = FromClause(self.connectionHelper)
         fc.reset_data_schema()
         self.update_state(FROM_CLAUSE + RUNNING)
+        init_was_done = fc.init.done
         check = fc.doJob(query)
         self.update_state(FROM_CLAUSE + DONE)
-        fc.local_elapsed_time = fc.local_elapsed_time - fc.init.local_elapsed_time
+        # Initiator does the one-time pre-extraction work: working-schema setup,
+        # base-table backup, row counts, and optional scale-down. It runs inside
+        # FromClause.setup(), so subtract it from the From Clause row and report
+        # it separately instead.
+        init_elapsed_time = 0
+        if not init_was_done and fc.init.local_elapsed_time is not None:
+            init_elapsed_time = fc.init.local_elapsed_time
+            # App-call counts are diagnostic stats only; default to zero when an
+            # extractor (e.g. Initiator) does not track them.
+            self.time_profile.update_for_init(
+                init_elapsed_time, getattr(fc.init, "app_calls", 0) or 0)
+        if fc.local_elapsed_time is not None:
+            fc.local_elapsed_time = fc.local_elapsed_time - init_elapsed_time
         self.time_profile.update_for_from_clause(fc.local_elapsed_time, fc.app_calls)
         io = IOState(query, fc.core_relations)
         if not check or not fc.done:
@@ -77,6 +90,17 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         self.all_sizes = fc.init.all_sizes
         self.key_lists = fc.get_key_lists()
         self.global_pk_dict = fc.init.global_pk_dict
+
+        # The probing above renames tables inside the user schema and always
+        # rolls the transaction back. Only after it has completed do we create
+        # working-schema backups, and only for the core relations that were
+        # actually identified. This keeps the backup minimal and guarantees the
+        # user schema is never used as a scratch area by mistake.
+        if not fc.init.backup_done and fc.core_relations:
+            if not self.connectionHelper.config.use_cs2 and \
+                    not self.connectionHelper.config.scale_down:
+                fc.init.take_backup(self.core_relations, self.all_sizes)
+                fc.init.backup_done = True
 
         eq = self._after_from_clause_extract(query, self.core_relations)
         self.connectionHelper.closeConnection()

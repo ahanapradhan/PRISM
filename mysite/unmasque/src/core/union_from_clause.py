@@ -9,7 +9,9 @@ class UnionFromClause(Schema, AppExtractorBase):
         super().__init__(connectionHelper, "Union_fc")
         self.comtabs = None
         self.fromtabs = None
-        self.to_nullify = None
+        self.to_nullify = set()
+        self.nullified = set()
+        self._transaction_open = False
         self.fromClause = FromClause(connectionHelper)
 
     def get_relations(self):
@@ -18,27 +20,110 @@ class UnionFromClause(Schema, AppExtractorBase):
         self.set_all_relations(self.fromClause.all_relations)
         return self.all_relations
 
+    def _relation_exists(self, table):
+        schema, _, name = table.partition(".")
+        return self.connectionHelper.is_view_or_table(name.lower(), schema.lower()) is not None
+
+    @staticmethod
+    def _bare_name(table):
+        # RENAME TO only accepts an unqualified name.
+        return table.rsplit(".", 1)[-1]
+
+    def _nullify_one(self, tab):
+        original = self.get_original_table_name(tab)
+        dirty_name = self._get_dirty_name(tab)
+        dirty = self.get_original_table_name(dirty_name)
+
+        if not self._relation_exists(original):
+            if not self._relation_exists(dirty):
+                raise RuntimeError(f"relation {original} does not exist")
+            self.connectionHelper.execute_sql(
+                [self.connectionHelper.queries.alter_table_rename_to(
+                    dirty, self._bare_name(original))], self.logger)
+        self.connectionHelper.execute_sql(
+            [self.connectionHelper.queries.drop_table_cascade(dirty),
+             self.connectionHelper.queries.alter_table_rename_to(original, dirty_name),
+             self.connectionHelper.queries.create_table_like(original, dirty)],
+            self.logger)
+        if not self._relation_exists(original) or not self._relation_exists(dirty):
+            raise RuntimeError(f"could not nullify {original}")
+        self.nullified.add(tab)
+
     def nullify_except(self, s_set):
-        self.to_nullify = s_set.difference(self.comtabs)
+        if getattr(self, "_transaction_open", False):
+            self.abort_nullify()
+        self.to_nullify = set()
+        self.nullified = set()
+        if self.comtabs is None:
+            return
+        self.to_nullify = set(s_set).difference(self.comtabs)
+        if not self.to_nullify:
+            return
         self.logger.debug("to nullify " + str(self.to_nullify))
-        for tab in self.to_nullify:
-            self.connectionHelper.execute_sql([self.connectionHelper.queries.alter_table_rename_to(
-                self.get_original_table_name(tab), self._get_dirty_name(tab)),
-                self.connectionHelper.queries.create_table_like(
-                    self.get_original_table_name(tab),
-                    self.get_original_table_name(self._get_dirty_name(tab)))])
+        # Keep the whole nullify/query/revert cycle in one transaction. If
+        # unmasque or the database dies before revert commits, PostgreSQL rolls
+        # the renames back and the user-schema tables stay untouched.
+        self.connectionHelper.begin_transaction()
+        self._transaction_open = True
+        try:
+            for tab in sorted(self.to_nullify):
+                self._nullify_one(tab)
+        except Exception as error:
+            self.abort_nullify()
+            self.logger.error(f"Could not nullify tables: {error}")
+            raise
 
     def run_query(self, QH):
         return self.app.doJob(QH)
 
+    def _revert_one(self, tab):
+        original = self.get_original_table_name(tab)
+        dirty = self.get_original_table_name(self._get_dirty_name(tab))
+
+        original_exists = self._relation_exists(original)
+        dirty_exists = self._relation_exists(dirty)
+        if dirty_exists:
+            statements = []
+            if original_exists:
+                statements.append(self.connectionHelper.queries.drop_table_cascade(original))
+            statements.append(self.connectionHelper.queries.alter_table_rename_to(
+                dirty, self._bare_name(original)))
+            self.connectionHelper.execute_sql(statements, self.logger)
+        elif not original_exists:
+            raise RuntimeError(f"relation {original} does not exist and has no backup")
+        if not self._relation_exists(original):
+            raise RuntimeError(f"could not restore {original}")
+
     def revert_nullify(self):
-        for tab in self.to_nullify:
-            self.connectionHelper.execute_sql([self.connectionHelper.queries.drop_table(
-                self.get_original_table_name(tab)),
-                self.connectionHelper.queries.alter_table_rename_to(
-                    self.get_original_table_name(self._get_dirty_name(tab)), tab),
-                self.connectionHelper.queries.drop_table(
-                    self.get_original_table_name(self._get_dirty_name(tab)))])
+        if not self.nullified:
+            self.to_nullify = set()
+            if getattr(self, "_transaction_open", False):
+                self.abort_nullify()
+            return
+        if not getattr(self, "_transaction_open", False):
+            self.connectionHelper.begin_transaction()
+            self._transaction_open = True
+        try:
+            for tab in sorted(self.nullified):
+                self._revert_one(tab)
+            self.connectionHelper.commit_transaction()
+        except Exception as error:
+            # The transaction started at nullify time is still uncommitted, so
+            # rolling back restores the user tables even if revert itself fails.
+            self.abort_nullify()
+            self.logger.error(f"Could not restore user tables: {error}")
+            raise
+        self._transaction_open = False
+        self.nullified = set()
+        self.to_nullify = set()
+
+    def abort_nullify(self):
+        """Rollback an open nullify transaction without touching user data."""
+        if getattr(self, "_transaction_open", False):
+            self.connectionHelper.rollback_transaction()
+            self._transaction_open = False
+        self.nullified = set()
+        self.to_nullify = set()
 
     def get_partial_QH(self, QH):
         return self.doJob(QH)
@@ -60,7 +145,11 @@ class UnionFromClause(Schema, AppExtractorBase):
 
     def get_fromTabs(self, QH):
         if self.fromtabs is None:
-            self.fromtabs = self.fromClause.doJob(QH, FromClause.TYPE_ERROR)
+            res = self.fromClause.doJob(QH, FromClause.TYPE_ERROR)
+            if isinstance(res, str):
+                self.logger.error(f"from-table extraction failed, got {res!r} instead of a table list")
+                res = []
+            self.fromtabs = res
         self.logger.debug(str(self.fromtabs))
         return self.fromtabs
 
@@ -74,4 +163,3 @@ class UnionFromClause(Schema, AppExtractorBase):
                 res = []
             self.comtabs = set(res or []) & set(tabs)
         return self.comtabs
-

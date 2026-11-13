@@ -24,19 +24,24 @@ class Minimizer(AppExtractorBase, ABC):
     def getCoreSizes(self):
         sizes = {}
         for table in self.all_relations:
-            sizes[table] = self.connectionHelper.execute_sql_fetchone_0(
+            count = self.connectionHelper.execute_sql_fetchone_0(
                 self.connectionHelper.queries.get_row_count(self.get_fully_qualified_table_name(table)))
+            if count is not None:
+                sizes[table] = count
         self.logger.debug(sizes)
         return sizes
 
     def extract_params_from_args(self, args):
         return args[0]
 
-    def sanity_check(self, query):
+    def sanity_check(self, query, expect_populated=True):
         # SANITY CHECK
         new_result = self.app.doJob(query)
         if self.app.isQ_result_no_full_nullfree_row(new_result):
-            self.logger.error("Error: Query out of extractable domain\n")
+            if expect_populated:
+                self.logger.error("Error: Query out of extractable domain\n")
+            else:
+                self.logger.debug("Falsified OR probe returned no rows, as expected.")
             return False
         return True
 

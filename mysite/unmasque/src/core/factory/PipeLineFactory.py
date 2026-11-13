@@ -75,7 +75,6 @@ class PipeLineFactory:
                 print("Extraction Pipeline")
         else:  # detect_union:
             pipe = UnionPipeLine(connectionHelper)
-            print("Union Pipeline")
         self.pipeline = pipe
         return pipe
 

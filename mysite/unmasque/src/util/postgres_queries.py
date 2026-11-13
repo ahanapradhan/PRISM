@@ -1,14 +1,23 @@
 from .abstract_queries import CommonQueries
+from .constants import WORKING_SCHEMA
 from .utils import get_format
 
 
 class PostgresQueries(CommonQueries):
+    schema = WORKING_SCHEMA
+
+    def _create_table(self, tab, definition, if_not_exists=False):
+        """Build a CREATE TABLE statement, unlogged for working-schema tables."""
+        schema = self.schema or WORKING_SCHEMA
+        table_kind = "unlogged table" if str(tab).startswith(f"{schema}.") else "table"
+        exists = " if not exists" if if_not_exists else ""
+        return f"Create {table_kind}{exists} {tab} {definition}; "
 
     def create_table_as_select_star_from_where(self, tab, fromtab, where):
-        return f"Create table {tab} as (Select * from {fromtab} where {where}); "  # \
+        return self._create_table(tab, f"as (Select * from {fromtab} where {where})")
 
     def create_table_as_select_star_from_limit_1(self, tab, fromtab):
-        return f"Create table {tab} as (Select * from {fromtab} limit 1); "  # \
+        return self._create_table(tab, f"as (Select * from {fromtab} limit 1)")
 
     def form_update_query_with_value(self, update_string, datatype, val):
         update_val = get_format(datatype, val)
@@ -33,10 +42,10 @@ class PostgresQueries(CommonQueries):
         return f"Alter view {tab} rename to {retab};"
 
     def create_table_like(self, tab, ctab):
-        return f"Create table if not exists {tab} (like {ctab} including indexes); "  # \
+        return self._create_table(tab, f"(like {ctab} including indexes)", if_not_exists=True)
 
     def create_table_as_select_star_from(self, tab, fromtab):
-        return f"Create table if not exists {tab} as select * from {fromtab}; "  # \
+        return self._create_table(tab, f"as select * from {fromtab}", if_not_exists=True)
 
     def get_row_count(self, tab):
         return f"select count(*) from {tab};"
@@ -53,6 +62,18 @@ class PostgresQueries(CommonQueries):
     def get_min_max_ctid(self, tab):
         return f"select min(ctid), max(ctid) from {tab};"
 
+    def get_min_max_of_col(self, tab, col):
+        return f"select min({col}), max({col}) from {tab};"
+
+    def get_pk_columns(self, schema, tab):
+        """Primary-key column names of ``schema.tab`` in key order, from the catalog."""
+        return (f"select a.attname from pg_index i "
+                f"join pg_class c on c.oid = i.indrelid "
+                f"join pg_namespace n on n.oid = c.relnamespace "
+                f"join pg_attribute a on a.attrelid = c.oid and a.attnum = any(i.indkey::int2[]) "
+                f"where i.indisprimary and n.nspname = '{schema}' and c.relname = '{tab}' "
+                f"order by array_position(i.indkey::int2[], a.attnum);")
+
     def drop_view(self, tab):
         return f"drop view if exists {tab} cascade;"
 
@@ -64,12 +85,31 @@ class PostgresQueries(CommonQueries):
         _end_ctid = str(mid_ctid1)
         return f"create view {view} as select * from {tab} where ctid >= '{_start_citd}' and ctid <= '{_end_ctid}';"
 
+    def create_view_as_select_star_where_pk_range(self, view, tab, col, lo, hi):
+        """Half-open PK range view: rows with ``col`` in ``[lo, hi)``."""
+        return (f"create view {view} as select * from {tab} "
+                f"where {col} >= {self._format_pk_value(lo)} and {col} < {self._format_pk_value(hi)};")
+
+    def create_table_as_select_star_from_pk_range(self, tab, fromtab, col, lo, hi):
+        """Materialize rows with ``col`` in ``[lo, hi)`` into a real table."""
+        return self._create_table(tab, f"as select * from {fromtab} "
+                                       f"where {col} >= {self._format_pk_value(lo)} "
+                                       f"and {col} < {self._format_pk_value(hi)}")
+
+    @staticmethod
+    def _format_pk_value(val):
+        import datetime
+        if isinstance(val, datetime.datetime):
+            return f"'{val.isoformat(sep=' ')}'"
+        if isinstance(val, datetime.date):
+            return f"'{val.isoformat()}'"
+        return str(val)
+
     def create_table_as_select_star_from_ctid(self, end_ctid, start_ctid, tab, fromtab):
         _start_citd = str(start_ctid)
         _end_ctid = str(end_ctid)
-        return f"create table {tab} as select * from {fromtab} " \
-               f"where ctid >= '{_start_citd}' and ctid <= '{_end_ctid}'; "  # \
-        # f"ALTER TABLE {tab} SET (autovacuum_enabled = false);"
+        return self._create_table(tab, f"as select * from {fromtab} "
+                                       f"where ctid >= '{_start_citd}' and ctid <= '{_end_ctid}'")
 
     def get_ctid_from(self, min_or_max, tabname):
         return f"select {min_or_max}(ctid) from {tabname};"
