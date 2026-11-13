@@ -62,6 +62,18 @@ class PostgresQueries(CommonQueries):
     def get_min_max_ctid(self, tab):
         return f"select min(ctid), max(ctid) from {tab};"
 
+    def get_min_max_of_col(self, tab, col):
+        return f"select min({col}), max({col}) from {tab};"
+
+    def get_pk_columns(self, schema, tab):
+        """Primary-key column names of ``schema.tab`` in key order, from the catalog."""
+        return (f"select a.attname from pg_index i "
+                f"join pg_class c on c.oid = i.indrelid "
+                f"join pg_namespace n on n.oid = c.relnamespace "
+                f"join pg_attribute a on a.attrelid = c.oid and a.attnum = any(i.indkey::int2[]) "
+                f"where i.indisprimary and n.nspname = '{schema}' and c.relname = '{tab}' "
+                f"order by array_position(i.indkey::int2[], a.attnum);")
+
     def drop_view(self, tab):
         return f"drop view if exists {tab} cascade;"
 
@@ -72,6 +84,26 @@ class PostgresQueries(CommonQueries):
         _start_citd = str(start_ctid)
         _end_ctid = str(mid_ctid1)
         return f"create view {view} as select * from {tab} where ctid >= '{_start_citd}' and ctid <= '{_end_ctid}';"
+
+    def create_view_as_select_star_where_pk_range(self, view, tab, col, lo, hi):
+        """Half-open PK range view: rows with ``col`` in ``[lo, hi)``."""
+        return (f"create view {view} as select * from {tab} "
+                f"where {col} >= {self._format_pk_value(lo)} and {col} < {self._format_pk_value(hi)};")
+
+    def create_table_as_select_star_from_pk_range(self, tab, fromtab, col, lo, hi):
+        """Materialize rows with ``col`` in ``[lo, hi)`` into a real table."""
+        return self._create_table(tab, f"as select * from {fromtab} "
+                                       f"where {col} >= {self._format_pk_value(lo)} "
+                                       f"and {col} < {self._format_pk_value(hi)}")
+
+    @staticmethod
+    def _format_pk_value(val):
+        import datetime
+        if isinstance(val, datetime.datetime):
+            return f"'{val.isoformat(sep=' ')}'"
+        if isinstance(val, datetime.date):
+            return f"'{val.isoformat()}'"
+        return str(val)
 
     def create_table_as_select_star_from_ctid(self, end_ctid, start_ctid, tab, fromtab):
         _start_citd = str(start_ctid)

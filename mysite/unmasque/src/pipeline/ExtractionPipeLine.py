@@ -91,6 +91,17 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         self.key_lists = fc.get_key_lists()
         self.global_pk_dict = fc.init.global_pk_dict
 
+        # The probing above renames tables inside the user schema and always
+        # rolls the transaction back. Only after it has completed do we create
+        # working-schema backups, and only for the core relations that were
+        # actually identified. This keeps the backup minimal and guarantees the
+        # user schema is never used as a scratch area by mistake.
+        if not fc.init.backup_done and fc.core_relations:
+            if not self.connectionHelper.config.use_cs2 and \
+                    not self.connectionHelper.config.scale_down:
+                fc.init.take_backup(self.core_relations, self.all_sizes)
+                fc.init.backup_done = True
+
         eq = self._after_from_clause_extract(query, self.core_relations)
         self.connectionHelper.closeConnection()
         return eq

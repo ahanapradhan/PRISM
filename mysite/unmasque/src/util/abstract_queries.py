@@ -89,6 +89,22 @@ class CommonQueries(ABC):
         pass
 
     @abstractmethod
+    def get_min_max_of_col(self, tab, col):
+        pass
+
+    @abstractmethod
+    def get_pk_columns(self, schema, tab):
+        pass
+
+    @abstractmethod
+    def create_view_as_select_star_where_pk_range(self, view, tab, col, lo, hi):
+        pass
+
+    @abstractmethod
+    def create_table_as_select_star_from_pk_range(self, tab, fromtab, col, lo, hi):
+        pass
+
+    @abstractmethod
     def create_table_as_select_star_from_ctid(self, end_ctid, start_ctid, tab, fromtab):
         pass
 
