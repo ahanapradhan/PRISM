@@ -33,8 +33,7 @@ class SchemaSanitizer:
     def set_all_relations(self, relations: List[str]):
         self.all_relations.extend(copy.copy(relations))
 
-    def take_backup(self):
-        tables = self.all_relations
+    def take_backup(self, tables):
         for table in tables:
             self.backup_one_table(table)
 

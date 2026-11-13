@@ -1,4 +1,5 @@
 import re
+import time
 from _decimal import Decimal
 
 import psycopg2
@@ -101,10 +102,23 @@ class PostgresConnectionHelper(AbstractConnectionHelper):
             logger.debug("..cur execute.." + sql)
         try:
             fixed_query = sql.replace("'None'", "NULL")
+
+            t0 = time.perf_counter()
             cur.execute(fixed_query)
-            #cur.execute(sql)
+            t_execute = time.perf_counter() - t0
+
+            t1 = time.perf_counter()
             res = cur.fetchall()
+            t_fetch = time.perf_counter() - t1
+
+            if logger is not None:
+
+                logger.debug(f"execute: {t_execute:.3f}s")
+                logger.debug(f"fetchall: {t_fetch:.3f}s")
+                logger.debug(f"rows: {len(res)}")
+
             des = cur.description
+
         except psycopg2.ProgrammingError as e:
             if logger is not None:
                 logger.error(e)

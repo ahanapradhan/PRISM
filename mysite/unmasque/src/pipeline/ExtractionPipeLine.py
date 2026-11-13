@@ -62,20 +62,7 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         init_was_done = fc.init.done
         check = fc.doJob(query)
         self.update_state(FROM_CLAUSE + DONE)
-        # Initiator does the one-time pre-extraction work: working-schema setup,
-        # base-table backup, row counts, and optional scale-down. It runs inside
-        # FromClause.setup(), so subtract it from the From Clause row and report
-        # it separately instead.
-        init_elapsed_time = 0
-        if not init_was_done and fc.init.local_elapsed_time is not None:
-            init_elapsed_time = fc.init.local_elapsed_time
-            # App-call counts are diagnostic stats only; default to zero when an
-            # extractor (e.g. Initiator) does not track them.
-            self.time_profile.update_for_init(
-                init_elapsed_time, getattr(fc.init, "app_calls", 0) or 0)
-        if fc.local_elapsed_time is not None:
-            fc.local_elapsed_time = fc.local_elapsed_time - init_elapsed_time
-        self.time_profile.update_for_from_clause(fc.local_elapsed_time, fc.app_calls)
+
         io = IOState(query, fc.core_relations)
         if not check or not fc.done:
             self.error = check if check else self.error_string
@@ -99,8 +86,22 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         if not fc.init.backup_done and fc.core_relations:
             if not self.connectionHelper.config.use_cs2 and \
                     not self.connectionHelper.config.scale_down:
-                fc.init.take_backup(self.core_relations, self.all_sizes)
+                fc.init.take_backup(self.core_relations)
                 fc.init.backup_done = True
+                # Initiator does the one-time pre-extraction work: working-schema setup,
+                # base-table backup, row counts, and optional scale-down. It runs inside
+                # FromClause.setup(), so subtract it from the From Clause row and report
+                # it separately instead.
+                init_elapsed_time = 0
+                if not init_was_done and fc.init.local_elapsed_time is not None:
+                    init_elapsed_time = fc.init.local_elapsed_time
+                    # App-call counts are diagnostic stats only; default to zero when an
+                    # extractor (e.g. Initiator) does not track them.
+                    self.time_profile.update_for_init(
+                        init_elapsed_time, getattr(fc.init, "app_calls", 0) or 0)
+                if fc.local_elapsed_time is not None:
+                    fc.local_elapsed_time = fc.local_elapsed_time - init_elapsed_time
+                self.time_profile.update_for_from_clause(fc.local_elapsed_time, fc.app_calls)
 
         eq = self._after_from_clause_extract(query, self.core_relations)
         self.connectionHelper.closeConnection()

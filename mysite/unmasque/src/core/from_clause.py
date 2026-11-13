@@ -144,11 +144,6 @@ class FromClause(AppExtractorBase):
         # working-schema backups, and only for the core relations that were
         # actually identified. This keeps the backup minimal and guarantees the
         # user schema is never used as a scratch area by mistake.
-        if not is_common_table_check and not self.init.backup_done and self.core_relations:
-            if not self.connectionHelper.config.use_cs2 and \
-                    not self.connectionHelper.config.scale_down:
-                self.take_backup(self.core_relations, self.init.all_sizes)
-                self.init.backup_done = True
         return self.core_relations
 
     def get_key_lists(self):
