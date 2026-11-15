@@ -1,4 +1,5 @@
 import copy
+import time
 
 from ..core.dataclass.genPipeline_context import GenPipelineContext
 from ..core.dataclass.pgao_context import PGAOcontext
@@ -7,10 +8,11 @@ from ...src.pipeline.fragments.NepPipeLine import NepPipeLine
 from .abstract.generic_pipeline import GenericPipeLine
 from ..core.elapsed_time import create_zero_time_profile
 from ..util.constants import FROM_CLAUSE, START, DONE, RUNNING, PROJECTION, \
-    GROUP_BY, AGGREGATE, ORDER_BY, LIMIT, UNION, ERROR, OK
+    GROUP_BY, AGGREGATE, ORDER_BY, LIMIT, UNION, ERROR, OK, INIT
 from ...src.core.aggregation import Aggregation
 from ...src.core.from_clause import FromClause
 from ...src.core.groupby_clause import GroupBy
+from ...src.core.initialization import Initiator
 from ...src.core.limit import Limit
 from ...src.core.orderby_clause import OrderBy
 from ...src.core.projection import Projection
@@ -39,6 +41,31 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         self.pj = None
         self.global_pk_dict = None
         self.pgao_ctx = PGAOcontext()
+        self.initiator = None
+
+    def _run_initiator(self, query):
+        """Run the initiator as its own pipeline stage.
+
+        The initiator prepares the working schema, metadata, backup, and table
+        sizes. It must finish before From Clause extraction starts, and its time
+        must not be attributed to the From Clause stage. Running it here also
+        keeps its work out of Union's From Clause timing.
+
+        Returns (success, error_message).
+        """
+        initiator = Initiator(self.connectionHelper)
+        check = initiator.result
+        init_ran = not initiator.done
+        if init_ran:
+            check = initiator.doJob(query)
+            if initiator.local_elapsed_time is not None:
+                self.time_profile.update_for_init(initiator.local_elapsed_time, 0)
+        self.initiator = initiator
+
+        if not initiator.done or not check:
+            error = check if isinstance(check, str) else "Database initialization failed."
+            return False, error
+        return True, None
 
     def process(self, query: str):
         return GenericPipeLine.process(self, query)
@@ -52,17 +79,30 @@ class ExtractionPipeLine(DisjunctionPipeLine,
     def extract(self, query):
         self.connectionHelper.connectUsingParams()
         self.info[UNION] = "SKIPPED"
+
+        '''
+        Initialization
+        '''
+        check, init_error = self._run_initiator(query)
+        if not check:
+            self.error = init_error
+            self.logger.error(self.error)
+            self.update_state(ERROR)
+            self.info[INIT] = None
+            return None
+        self.info[INIT] = {'relations': self.initiator.all_relations,
+                           'sizes': self.initiator.all_sizes}
+
         '''
         From Clause Extraction
         '''
         self.update_state(FROM_CLAUSE + START)
-        fc = FromClause(self.connectionHelper)
+        fc = FromClause(self.connectionHelper, self.initiator)
         fc.reset_data_schema()
         self.update_state(FROM_CLAUSE + RUNNING)
-        init_was_done = fc.init.done
         check = fc.doJob(query)
         self.update_state(FROM_CLAUSE + DONE)
-
+        self.time_profile.update_for_from_clause(fc.local_elapsed_time, fc.app_calls)
         io = IOState(query, fc.core_relations)
         if not check or not fc.done:
             self.error = check if check else self.error_string
@@ -74,34 +114,23 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         self.info[FROM_CLAUSE] = fc.core_relations
         self.IO[FROM_CLAUSE] = io.get_dic()
         self.core_relations = fc.core_relations
-        self.all_sizes = fc.init.all_sizes
-        self.key_lists = fc.get_key_lists()
-        self.global_pk_dict = fc.init.global_pk_dict
+        self.all_sizes = self.initiator.all_sizes
+        self.key_lists = self.initiator.global_key_lists
+        self.global_pk_dict = self.initiator.global_pk_dict
 
         # The probing above renames tables inside the user schema and always
         # rolls the transaction back. Only after it has completed do we create
         # working-schema backups, and only for the core relations that were
         # actually identified. This keeps the backup minimal and guarantees the
-        # user schema is never used as a scratch area by mistake.
+        # user schema is never used as a scratch area by mistake. The backup is
+        # deferred init work, so its time is folded into the Init stage.
         if not fc.init.backup_done and fc.core_relations:
             if not self.connectionHelper.config.use_cs2 and \
                     not self.connectionHelper.config.scale_down:
+                backup_start = time.time()
                 fc.init.take_backup(self.core_relations)
                 fc.init.backup_done = True
-                # Initiator does the one-time pre-extraction work: working-schema setup,
-                # base-table backup, row counts, and optional scale-down. It runs inside
-                # FromClause.setup(), so subtract it from the From Clause row and report
-                # it separately instead.
-                init_elapsed_time = 0
-                if not init_was_done and fc.init.local_elapsed_time is not None:
-                    init_elapsed_time = fc.init.local_elapsed_time
-                    # App-call counts are diagnostic stats only; default to zero when an
-                    # extractor (e.g. Initiator) does not track them.
-                    self.time_profile.update_for_init(
-                        init_elapsed_time, getattr(fc.init, "app_calls", 0) or 0)
-                if fc.local_elapsed_time is not None:
-                    fc.local_elapsed_time = fc.local_elapsed_time - init_elapsed_time
-                self.time_profile.update_for_from_clause(fc.local_elapsed_time, fc.app_calls)
+                self.time_profile.update_for_init(time.time() - backup_start, 0)
 
         eq = self._after_from_clause_extract(query, self.core_relations)
         self.connectionHelper.closeConnection()

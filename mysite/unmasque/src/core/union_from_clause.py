@@ -5,14 +5,14 @@ from ...src.core.from_clause import FromClause
 
 class UnionFromClause(Schema, AppExtractorBase):
 
-    def __init__(self, connectionHelper):
+    def __init__(self, connectionHelper, initiator=None):
         super().__init__(connectionHelper, "Union_fc")
         self.comtabs = None
         self.fromtabs = None
         self.to_nullify = set()
         self.nullified = set()
         self._transaction_open = False
-        self.fromClause = FromClause(connectionHelper)
+        self.fromClause = FromClause(connectionHelper, initiator)
 
     def get_relations(self):
         if not self.fromClause.init.done:

@@ -14,15 +14,26 @@ class FromClause(AppExtractorBase):
     TYPE_ERROR = "error"
     TYPE_RENAME = "rename"
 
-    def __init__(self, connectionHelper):
+    def __init__(self, connectionHelper, initiator=None):
         super().__init__(connectionHelper, "FromClause")
-        self.init = Initiator(connectionHelper)
+        self.init = initiator if initiator is not None else Initiator(connectionHelper)
 
         self.all_relations = set()
         self.core_relations = []
         self.method = self.TYPE_ERROR
         self.timeout = True
         self.check_relations = None
+        self._init_started_here = False
+
+    def doJob(self, *args):
+        # Initiator work is a separate pipeline stage. When FromClause is used on
+        # its own, setup() may still initialize the database, so remove that time
+        # from the From Clause measurement instead of attributing it here.
+        self._init_started_here = False
+        result = super().doJob(*args)
+        if self._init_started_here and self.init.local_elapsed_time is not None:
+            self.local_elapsed_time -= self.init.local_elapsed_time
+        return result
 
     def set_check_relations(self, tabs):
         self.check_relations = copy.deepcopy(tabs)
@@ -110,12 +121,11 @@ class FromClause(AppExtractorBase):
         self.set_app_type()
         check = self.init.result
         if not self.init.done:
+            self._init_started_here = True
             check = self.init.doJob(query)
         if not check:
             return False
         self.all_relations = self.init.all_relations
-        # self.local_start_time = self.init.local_end_time
-        # still in union pipeline from clause timins include initiator timings. Find out why.
         return True
 
     def doActualJob(self, args=None):

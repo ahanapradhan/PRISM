@@ -31,10 +31,13 @@ def algo(db, QH, strategy="border"):
 
     if len(Partial_QH) <= 1:
         # if part table has only 1 table, we can't partition it!
-        return {frozenset(db.fromtabs)}, construct_pretty_print_string({frozenset(db.fromtabs)}), (0, db.app_calls)
+        return {frozenset(db.fromtabs)}, construct_pretty_print_string({frozenset(db.fromtabs)}), (0, 0)
 
     local_start_time = time.time()
-    local_start_capp_calls = db.app_calls
+    # app_calls on db only reflects the last db.doJob() delta. The search
+    # invokes db.run_query() directly, so measure the shared app counter as a
+    # live counter to attribute the oracle calls to the UNION stage.
+    local_start_capp_calls = get_app_call_count(db)
 
     search = {"none": search_no_pruning, "bfs": search_bfs, "border": search_border}[strategy]
     MaxSide = search(db, QH, Partial_QH)
@@ -53,7 +56,7 @@ def algo(db, QH, strategy="border"):
     prettY_str = construct_pretty_print_string(Partials)
 
     local_end_time = time.time()
-    local_end_capp_calls = db.app_calls
+    local_end_capp_calls = get_app_call_count(db)
 
     return Partials, prettY_str, (local_end_time - local_start_time, local_end_capp_calls - local_start_capp_calls)
 
@@ -214,6 +217,18 @@ def search_border(db, QH, aux):
 # ----------------------------------------------------------------------
 # helpers (unchanged)
 # ----------------------------------------------------------------------
+def get_app_call_count(db):
+    """Return the live oracle-call counter for a union database object.
+
+    Real UnionFromClause objects expose the shared executable as ``app``;
+    lightweight test doubles only maintain ``app_calls`` directly.
+    """
+    app = getattr(db, 'app', None)
+    if app is not None and hasattr(app, 'method_call_count'):
+        return app.method_call_count
+    return db.app_calls
+
+
 def update_max_side(u, max_side):
     """Maintain the antichain of maximal SIDE sets."""
     if any(u <= s for s in max_side):

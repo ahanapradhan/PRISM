@@ -8,7 +8,8 @@ def create_zero_time_profile():
 
 
 class ElapsedTime:
-    clause_keys = ["From Clause:",
+    clause_keys = ["Init:",
+                   "From Clause:",
                    "Union:",
                    "Restore DB:",
                    "Correlated Sampling:",
@@ -30,6 +31,7 @@ class ElapsedTime:
 
         self.t_sampling = 0
         self.t_view_min = 0
+        self.t_init = 0
         self.t_where_clause = 0
         self.t_projection = 0
         self.t_groupby = 0
@@ -41,12 +43,12 @@ class ElapsedTime:
         self.t_union = 0
         self.t_from_clause = 0
         self.t_result_comp = 0
-        self.t_init = 0
         self.t_total = 0
         self.display_string = ''
 
         self.app_sampling = 0
         self.app_view_min = 0
+        self.app_init = 0
         self.app_where_clause = 0
         self.app_projection = 0
         self.app_groupby = 0
@@ -58,13 +60,14 @@ class ElapsedTime:
         self.app_union = 0
         self.app_from_clause = 0
         self.app_result_comp = 0
-        self.app_init = 0
         self.app_total = 0
 
     def update_for_init(self, t_u, c_app):
-        """Pre-extraction setup: working schema, base-table backup, sizes, scale-down.
+        """Pre-extraction setup: working schema, metadata, row counts, scale-down.
 
-        Kept out of the per-module table: it is one-time setup, not PRISM extraction.
+        Also accumulates the deferred core-relation backup performed right after
+        From Clause probing. Reported as its own Init row and excluded from
+        PRISM-total.
         """
         self.t_init += t_u
         self.app_init += c_app
@@ -190,12 +193,9 @@ class ElapsedTime:
         self.display_string += str("\nWall-clock: " + ' ' * (max_len - len("Wall-clock:")) + " " +
                                    str(round(self.get_wall_clock_total(), 2)) + " s.")
 
-        # Pre-extraction setup (working schema, backup, row counts, scale-down)
-        # is one-time setup, not PRISM extraction. Report it on its own line
-        # instead of adding a table row.
-        if self.t_init:
-            print(f"Pre-extraction init/backup: {self.t_init:.2f} s "
-                  f"(included in Wall-clock, excluded from PRISM-total).")
+        # Pre-extraction setup (working schema, metadata, backup, row counts,
+        # scale-down) is reported as its own Init row above, so only the
+        # PRISM-total and Wall-clock summary lines are appended here.
 
         # print(self.display_string)
         pp_tab = zip(self.clause_keys, times, app_calls)
@@ -234,7 +234,7 @@ class ElapsedTime:
         """Time spent by PRISM extraction, excluding pre-extraction init/backup."""
         if self.t_total:
             return max(self.t_total - self.t_init, 0.0)
-        return sum(self.get_times())
+        return max(sum(self.get_times()) - self.t_init, 0.0)
 
     def get_wall_clock_total(self):
         """End-to-end wall-clock time, including pre-extraction init/backup."""
@@ -243,7 +243,8 @@ class ElapsedTime:
         return self.get_prism_total() + self.t_init
 
     def get_times(self):
-        times = [round(entry, 2) for entry in [self.t_from_clause,
+        times = [round(entry, 2) for entry in [self.t_init,
+                                               self.t_from_clause,
                                                self.t_union,
                                                self.t_db_restore,
                                                self.t_sampling,
@@ -261,7 +262,8 @@ class ElapsedTime:
         return times
 
     def get_app_calls(self):
-        apps = [self.app_from_clause,
+        apps = [self.app_init,
+                self.app_from_clause,
                 self.app_union,
                 self.app_db_restore,
                 self.app_sampling,

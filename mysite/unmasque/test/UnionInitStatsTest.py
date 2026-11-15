@@ -5,22 +5,18 @@ from mysite.unmasque.src.core.union import Union
 
 
 class _Init:
-    def __init__(self, app_calls=None):
-        self.done = False
-        self.local_elapsed_time = 1.25
-        self.global_key_lists = []
-        if app_calls is not None:
-            self.app_calls = app_calls
+    done = True
+    global_key_lists = []
 
 
 class _FromClause:
-    def __init__(self, app_calls=None):
-        self.init = _Init(app_calls)
+    def __init__(self):
+        self.init = _Init()
 
 
 class _Db:
-    def __init__(self, connection, app_calls=None):
-        self.fromClause = _FromClause(app_calls)
+    def __init__(self):
+        self.fromClause = _FromClause()
         self.fromtabs = {'a'}
 
     def reset_data_schema(self):
@@ -39,30 +35,33 @@ class _Algorithm:
         return {frozenset(db.fromtabs)}, 'pretty', (0.0, 0)
 
 
-def _run_union(monkeypatch, app_calls):
-    monkeypatch.setattr(union_module, 'UnionFromClause',
-                        lambda connection: _Db(connection, app_calls))
+def _run_union(monkeypatch):
+    captured = {}
+
+    def make_db(connection, initiator=None):
+        captured['initiator'] = initiator
+        return _Db()
+
+    monkeypatch.setattr(union_module, 'UnionFromClause', make_db)
     monkeypatch.setattr(union_module, 'algorithm1', _Algorithm)
 
     union = Union.__new__(Union)
     union.connectionHelper = SimpleNamespace()
-    union.init_elapsed_time = 0
-    union.init_app_calls = 0
+    union.initiator = SimpleNamespace(done=True)
     union.all_relations = None
     result = union.doActualJob('query')
-    return union, result
+    return union, result, captured
 
 
-def test_missing_app_calls_stat_does_not_break_extraction(monkeypatch):
-    union, result = _run_union(monkeypatch, app_calls=None)
+def test_initiator_is_forwarded_to_union_from_clause(monkeypatch):
+    union, result, captured = _run_union(monkeypatch)
 
     assert result[1] == 'pretty'
-    assert union.init_elapsed_time == 1.25
-    assert union.init_app_calls == 0
+    assert captured['initiator'] is union.initiator
 
 
-def test_present_app_calls_stat_is_recorded(monkeypatch):
-    union, _ = _run_union(monkeypatch, app_calls=7)
+def test_initiator_stats_are_no_longer_captured_by_union(monkeypatch):
+    union, _, _ = _run_union(monkeypatch)
 
-    assert union.init_elapsed_time == 1.25
-    assert union.init_app_calls == 7
+    assert not hasattr(union, 'init_elapsed_time')
+    assert not hasattr(union, 'init_app_calls')

@@ -14,8 +14,15 @@ class UnionPipeLine(OuterJoinPipeLine):
     def extract(self, query):
         # opening and closing connection actions are vital.
         self.connectionHelper.connectUsingParams()
+        check, init_error = self._run_initiator(query)
+        if not check:
+            self.error = init_error
+            self.logger.error(self.error)
+            self.update_state(ERROR)
+            return None
         self.update_state(UNION + START)
         union = Union(self.connectionHelper)
+        union.initiator = self.initiator
         self.update_state(UNION + RUNNING)
         p, pstr, union_profile = union.doJob(query)
         self.update_state(UNION + DONE)
@@ -83,11 +90,8 @@ class UnionPipeLine(OuterJoinPipeLine):
 
     def __update_time_profile(self, union, union_time):
         duration, app_calls = union_time[0], union_time[1]
-        init_time = getattr(union, "init_elapsed_time", 0) or 0
-        if init_time:
-            self.time_profile.update_for_init(init_time, getattr(union, "init_app_calls", 0) or 0)
         self.time_profile.update_for_from_clause(
-            union.local_elapsed_time - duration - init_time, union.app_calls - app_calls)
+            union.local_elapsed_time - duration, union.app_calls - app_calls)
         self.time_profile.update_for_union(duration, app_calls)
 
     def __nullify_relations(self, relations):
