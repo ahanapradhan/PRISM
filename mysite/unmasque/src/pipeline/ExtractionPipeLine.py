@@ -123,14 +123,20 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         # working-schema backups, and only for the core relations that were
         # actually identified. This keeps the backup minimal and guarantees the
         # user schema is never used as a scratch area by mistake. The backup is
-        # deferred init work, so its time is folded into the Init stage.
+        # pure overhead of the pipeline: it is deliberately NOT attributed to
+        # any stage (only the end-to-end wall-clock time includes it), so stage
+        # timings reflect extraction work rather than table copying.
         if not fc.init.backup_done and fc.core_relations:
             if not self.connectionHelper.config.use_cs2 and \
                     not self.connectionHelper.config.scale_down:
                 backup_start = time.time()
                 fc.init.take_backup(self.core_relations)
                 fc.init.backup_done = True
-                self.time_profile.update_for_init(time.time() - backup_start, 0)
+                backup_duration = time.time() - backup_start
+                self.time_profile.update_for_backup(backup_duration)
+                self.logger.debug(
+                    f"Core-relation backup took {backup_duration:.2f}s "
+                    "(wall-clock only, not attributed to any stage)")
 
         eq = self._after_from_clause_extract(query, self.core_relations)
         self.connectionHelper.closeConnection()

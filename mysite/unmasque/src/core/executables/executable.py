@@ -93,3 +93,19 @@ class Executable(Base):
 
     def isQ_result_has_some_data(self, Res):
         return not self.isQ_result_empty(Res)
+
+    @staticmethod
+    def _strip_query_terminator(query):
+        return query.rstrip().rstrip(';')
+
+    def is_query_result_no_full_nullfree_row(self, query):
+        """Run <query> as an existence probe instead of fetching every row.
+
+        For the base executable this is exactly the emptiness check, but at
+        most one row is transferred instead of the whole result.
+        """
+        q = self._strip_query_terminator(query)
+        res = self.doJob(f"SELECT q.* FROM ({q}) AS q LIMIT 1;")
+        if not self.done or not isinstance(res, list):
+            return False
+        return self.isQ_result_empty(res)

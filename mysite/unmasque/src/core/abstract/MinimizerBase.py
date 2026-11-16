@@ -36,8 +36,7 @@ class Minimizer(AppExtractorBase, ABC):
 
     def sanity_check(self, query, expect_populated=True):
         # SANITY CHECK
-        new_result = self.app.doJob(query)
-        if self.app.isQ_result_no_full_nullfree_row(new_result):
+        if self.app.is_query_result_no_full_nullfree_row(query):
             if expect_populated:
                 self.logger.error("Error: Query out of extractable domain\n")
             else:
@@ -130,12 +129,10 @@ class Minimizer(AppExtractorBase, ABC):
             [self.connectionHelper.queries.create_view_as_select_star_where_ctid(end_ctid, start_ctid,
                         self.get_fully_qualified_table_name(view), self.get_fully_qualified_table_name(tab))],
             self.logger)
-        new_result = self.app.doJob(query)
+        works = not self.app.is_query_result_no_full_nullfree_row(query)
         self.connectionHelper.execute_sql([self.connectionHelper.queries.drop_view(
                                                     self.get_fully_qualified_table_name(view))], self.logger)
-        if self.app.isQ_result_nonEmpty_nullfree(new_result):
-            return True  # this half works
-        return False  # this half does not work
+        return works  # this half works / does not work
 
     def update_with_remaining_size(self, core_sizes, end_ctid, start_ctid, tabname, dirty_tab):
         self.logger.debug(start_ctid, end_ctid)

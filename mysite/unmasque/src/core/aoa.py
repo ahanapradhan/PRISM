@@ -585,8 +585,7 @@ class InequalityPredicate(FilterHolder):
         joined_tab_attribs = self.__get_equi_join_group(tab_attrib)
         for t_a in joined_tab_attribs:
             self.mutate_dmin_with_val(datatype, t_a, val)
-        new_res = self.app.doJob(query)
-        if self.app.isQ_result_no_full_nullfree_row(new_res):
+        if self.app.is_query_result_no_full_nullfree_row(query):
             for t_a in joined_tab_attribs:
                 self.mutate_dmin_with_val(datatype, t_a, dmin_val)
                 val = dmin_val

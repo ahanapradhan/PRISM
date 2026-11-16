@@ -81,8 +81,8 @@ def search_no_pruning(db, QH, aux):
     for k in range(1, n):                                   # every nonempty proper subset
         for c in combinations(aux_sorted, k):
             u = frozenset(c)
-            Res = nullify_and_runQuery(QH, db, u)           # always call the oracle
-            if not db.isEmpty(Res):
+            empty = nullify_and_runQuery_is_empty(QH, db, u)   # always call the oracle
+            if not empty:
                 update_max_side(u, max_side)
     return max_side
 
@@ -138,8 +138,8 @@ def search_bfs(db, QH, aux):
         if any(c <= u for c in known_core):                # CORE is upward-closed
             mark_core(u)
             continue
-        Res = nullify_and_runQuery(QH, db, u)
-        if db.isEmpty(Res):
+        empty = nullify_and_runQuery_is_empty(QH, db, u)
+        if empty:
             mark_core(u)
         else:
             mark_side(u)
@@ -168,8 +168,8 @@ def search_border(db, QH, aux):
         if any(c <= u for c in min_core):
             return False
         if u not in cache:
-            Res = nullify_and_runQuery(QH, db, u)
-            cache[u] = not db.isEmpty(Res)
+            empty = nullify_and_runQuery_is_empty(QH, db, u)
+            cache[u] = not empty
         return cache[u]
 
     def grow(u):
@@ -274,6 +274,24 @@ def nullify_and_runQuery(QH, db, s):
         raise
     else:
         db.revert_nullify()
+
+
+def nullify_and_runQuery_is_empty(QH, db, s):
+    """Boolean oracle: same nullify/revert protocol as nullify_and_runQuery,
+    but only transfers at most one row instead of the whole result."""
+    db.nullify_except(s)
+    try:
+        is_empty = db.is_query_empty(QH)
+    except Exception:
+        abort = getattr(db, "abort_nullify", None)
+        if abort is not None:
+            abort()
+        else:
+            db.revert_nullify()
+        raise
+    else:
+        db.revert_nullify()
+        return is_empty
 
 
 def init(db, QH):

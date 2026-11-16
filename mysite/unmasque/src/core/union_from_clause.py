@@ -131,6 +131,9 @@ class UnionFromClause(Schema, AppExtractorBase):
     def isEmpty(self, Res):
         return self.app.isQ_result_no_full_nullfree_row(Res)
 
+    def is_query_empty(self, QH):
+        return self.app.is_query_result_no_full_nullfree_row(QH)
+
     def extract_params_from_args(self, args):
         return args[0]
 

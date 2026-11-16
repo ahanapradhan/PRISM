@@ -32,6 +32,7 @@ class ElapsedTime:
         self.t_sampling = 0
         self.t_view_min = 0
         self.t_init = 0
+        self.t_backup = 0
         self.t_where_clause = 0
         self.t_projection = 0
         self.t_groupby = 0
@@ -65,9 +66,10 @@ class ElapsedTime:
     def update_for_init(self, t_u, c_app):
         """Pre-extraction setup: working schema, metadata, row counts, scale-down.
 
-        Also accumulates the deferred core-relation backup performed right after
-        From Clause probing. Reported as its own Init row and excluded from
-        PRISM-total.
+        Accumulates only initiator work. The deferred core-relation backup that
+        runs after From Clause probing is deliberately excluded from every
+        stage; only the end-to-end wall-clock time includes it. Reported as its
+        own Init row and excluded from PRISM-total.
         """
         self.t_init += t_u
         self.app_init += c_app
@@ -75,6 +77,14 @@ class ElapsedTime:
     def update_for_from_clause(self, t_u, c_app):
         self.t_from_clause += t_u
         self.app_from_clause += c_app
+
+    def update_for_backup(self, t_u):
+        """Core-relation backup time: wall-clock only, never a stage.
+
+        Kept separate so it is excluded from every stage row and from
+        PRISM-total, while the end-to-end Wall-clock total still includes it.
+        """
+        self.t_backup += t_u
 
     def update_for_union(self, t_u, c_app):
         self.t_union += t_u
@@ -150,6 +160,7 @@ class ElapsedTime:
         self.t_result_comp += other_profile.t_result_comp
         self.t_db_restore += other_profile.t_db_restore
         self.t_init += other_profile.t_init
+        self.t_backup += other_profile.t_backup
         # t_total is an end-to-end wall-clock measurement made once in doJob();
         # merging sub-profiles must not add a second total.
 
@@ -193,8 +204,9 @@ class ElapsedTime:
         self.display_string += str("\nWall-clock: " + ' ' * (max_len - len("Wall-clock:")) + " " +
                                    str(round(self.get_wall_clock_total(), 2)) + " s.")
 
-        # Pre-extraction setup (working schema, metadata, backup, row counts,
-        # scale-down) is reported as its own Init row above, so only the
+        # Pre-extraction setup (working schema, metadata, row counts, scale-down)
+        # is reported as its own Init row above; the core-relation backup is not
+        # attributed to any stage and shows up only in Wall-clock. Only the
         # PRISM-total and Wall-clock summary lines are appended here.
 
         # print(self.display_string)
@@ -231,9 +243,13 @@ class ElapsedTime:
         return self.table_string
 
     def get_prism_total(self):
-        """Time spent by PRISM extraction, excluding pre-extraction init/backup."""
+        """Time spent by PRISM extraction, excluding pre-extraction init/backup.
+
+        The core-relation backup is unattributed: it is subtracted here as well
+        as from every stage row, so only the Wall-clock total includes it.
+        """
         if self.t_total:
-            return max(self.t_total - self.t_init, 0.0)
+            return max(self.t_total - self.t_init - self.t_backup, 0.0)
         return max(sum(self.get_times()) - self.t_init, 0.0)
 
     def get_wall_clock_total(self):

@@ -33,3 +33,12 @@ class ZeroResultExecutable(Executable):
 
     def isQ_result_has_some_data(self, Res):
         return not self.isQ_result_empty(Res)
+
+    def is_query_result_no_full_nullfree_row(self, query):
+        q = self._strip_query_terminator(query)
+        # LIMIT 2 keeps the "exactly one all-zero/all-None row means empty"
+        # rule of isQ_result_empty detectable while transferring at most 2 rows.
+        res = self.doJob(f"SELECT q.* FROM ({q}) AS q LIMIT 2;")
+        if not self.done or not isinstance(res, list):
+            return False
+        return self.isQ_result_empty(res)
