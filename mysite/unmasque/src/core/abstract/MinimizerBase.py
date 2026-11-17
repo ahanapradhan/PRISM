@@ -85,7 +85,27 @@ class Minimizer(AppExtractorBase, ABC):
             end_ctid = mid_ctid1
         return end_ctid, start_ctid
 
+    def drop_relation_silently(self, tabname):
+        """Drop a stale relation (table or view) of the given name, if any.
+
+        The minimizer renames the working table to a backup/dirty name and
+        creates views in its place. A crashed previous run can leave the
+        backup name occupied; the rename would then fail silently (DuplicateTable
+        is swallowed by cus_execute_sqls) and every later create-view /
+        create-table on the working name degrades into a full-size no-op.
+        """
+        kind = self.connectionHelper.is_view_or_table(tabname, self.connectionHelper.config.schema)
+        if kind == 'table':
+            fn = self.connectionHelper.queries.drop_table_cascade
+        elif kind == 'view':
+            fn = self.connectionHelper.queries.drop_view
+        else:
+            return
+        self.connectionHelper.execute_sql(
+            [fn(self.get_fully_qualified_table_name(tabname))], self.logger)
+
     def get_start_and_end_ctids(self, core_sizes, query, tabname, dirty_tab):
+        self.drop_relation_silently(dirty_tab)
         self.connectionHelper.execute_sql([self.connectionHelper.queries.alter_table_rename_to(
                                                 self.get_fully_qualified_table_name(tabname), dirty_tab)])
         end_ctid, mid_ctid1, mid_ctid2, start_ctid = self.get_mid_ctids(core_sizes, tabname, dirty_tab)
@@ -136,6 +156,7 @@ class Minimizer(AppExtractorBase, ABC):
 
     def update_with_remaining_size(self, core_sizes, end_ctid, start_ctid, tabname, dirty_tab):
         self.logger.debug(start_ctid, end_ctid)
+        self.drop_relation_silently(tabname)
         self.connectionHelper.execute_sql(
             [self.connectionHelper.queries.create_table_as_select_star_from_ctid(end_ctid, start_ctid,
                                                             self.get_fully_qualified_table_name(tabname),

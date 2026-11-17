@@ -2,10 +2,17 @@ import datetime
 
 # Constants
 # These magic numbers are from https://www.postgresql.org/docs/8.1/datatype.htm
-min_numeric_val = -999.99 #-2147483648.88
-max_numeric_val = 999.99 #2147483647.88
-min_int_val = -99999 #-2147483648
-max_int_val = 99999 #2147483647
+# The domain bounds MUST span the real value domain of the data: the filter
+# stage probes these extremes to detect "no bound on this side" (SVI0), and a
+# bound that is inside the data range makes probes at the data values FIT,
+# so real bounds (e.g. l_extendedprice <= 70000 with dmin 4960.86) are lost
+# and ALP candidates never form (dom(col) = (imin, imax, delta) in the spec).
+# They must also FIT the schema's numeric precision (NUMERIC(15,2) rejects
+# anything >= 10^13), so they are capped below that.
+min_numeric_val = -9999999.99
+max_numeric_val = 9999999.99
+min_int_val = -9999999
+max_int_val = 9999999
 min_date_val = datetime.date(1, 1, 1)
 max_date_val = datetime.date(9999, 12, 31)
 

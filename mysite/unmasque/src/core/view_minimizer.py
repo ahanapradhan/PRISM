@@ -80,6 +80,7 @@ class ViewMinimizer(Minimizer):
         for tabname in sorted_relations:
             view_name = self._get_dirty_name(tabname) if cs_pass \
                 else self.connectionHelper.queries.get_restore_name(tabname)
+            self.drop_relation_silently(view_name)
             self.connectionHelper.execute_sql([self.connectionHelper.queries.alter_table_rename_to(
                 self.get_fully_qualified_table_name(tabname), view_name)])
             rctid = self.connectionHelper.execute_sql_fetchone(
