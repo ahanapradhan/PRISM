@@ -13,9 +13,16 @@ class Base(SchemaSanitizer):
     method_call_count = 0
 
     def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super(Base, cls).__new__(cls)
-        return cls._instance
+        # Per-class singleton: only look at this class's OWN __dict__.
+        # `cls._instance` would walk the MRO and find Base._instance, so
+        # constructing Base first (e.g. ExperimentPrep) would make every
+        # subsequent subclass constructor return that Base instance instead
+        # of a real extractor (ViewMinimizer.doJob silently returned None).
+        instance = cls.__dict__.get("_instance")
+        if instance is None:
+            instance = super(Base, cls).__new__(cls)
+            cls._instance = instance
+        return instance
 
     def __init__(self, connectionHelper: AbstractConnectionHelper, name: str, all_sizes=None):
         super().__init__(connectionHelper, all_sizes)
