@@ -20,6 +20,12 @@ class _FakeQueries:
     def hashtext_query(self, alias, table):
         return f"hashtext({alias})"
 
+    def combine_hash_queries(self, left_query, right_query):
+        return f"select ({left_query}), ({right_query});"
+
+    def insert_values(self, table, header, value_rows):
+        return f"INSERT INTO {table}{header} VALUES {', '.join(value_rows)};"
+
 
 class _FakeConnection:
     def __init__(self):

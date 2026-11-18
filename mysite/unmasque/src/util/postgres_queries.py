@@ -47,6 +47,9 @@ class PostgresQueries(CommonQueries):
     def create_table_as_select_star_from(self, tab, fromtab):
         return self._create_table(tab, f"as select * from {fromtab}", if_not_exists=True)
 
+    def select_row_count_from_query(self, query):
+        return f"select count(*) from ({query});"
+
     def get_row_count(self, tab):
         return f"select count(*) from {tab};"
 
@@ -179,3 +182,68 @@ class PostgresQueries(CommonQueries):
 
     def hashtext_query(self, tab, qualified_name):
         return f"select sum(hashtext) from (select hashtext({tab}::TEXT) FROM {qualified_name}) as T;"
+
+    def wrap_query_for_executable(self, schema, query):
+        return (f"set search_path='{schema}'; "
+                "SET enable_indexscan = on; SET enable_indexonlyscan = on; "
+                f"SET enable_seqscan = off; {query}")
+
+    def select_limited_rows_from_query(self, query, limit):
+        return f"SELECT q.* FROM ({query}) AS q LIMIT {limit};"
+
+    def select_nullfree_existence_from_query(self, query):
+        return f"SELECT 1 FROM ({query}) AS q WHERE ROW(q.*) IS NOT NULL LIMIT 1;"
+
+    HASH_AGGREGATE_PREFIX = (
+        "SET enable_sort=off; SET enable_hashagg=on; "
+        "SET enable_indexscan=off; SET enable_indexonlyscan=off; "
+        "SET enable_seqscan=on; "
+    )
+
+    def wrap_query_for_hash_aggregate_confirmation(self, query):
+        return self.HASH_AGGREGATE_PREFIX + query
+
+    def show_configuration(self, setting):
+        return f"SHOW {setting};"
+
+    def set_configuration(self, setting, value):
+        return f"SET {setting}={value};"
+
+    def hash_aggregate_probe_settings(self):
+        return [self.set_configuration("enable_sort", "off"),
+                self.set_configuration("enable_hashagg", "on")]
+
+    def set_search_path(self, schema):
+        return f"set search_path='{schema}';"
+
+    def combine_hash_queries(self, left_query, right_query):
+        return f"select ({left_query}), ({right_query});"
+
+    def insert_values(self, table, header, value_rows):
+        return f"INSERT INTO {table}{header} VALUES {', '.join(value_rows)};"
+
+    def drop_view_or_table_cascade(self, schema, table):
+        return (
+            "DO $$ BEGIN "
+            "IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE n.nspname = '{schema}' AND c.relname = '{table}' AND c.relkind = 'v') THEN "
+            f"EXECUTE 'DROP VIEW {schema}.{table} CASCADE'; "
+            "ELSIF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE n.nspname = '{schema}' AND c.relname = '{table}') THEN "
+            f"EXECUTE 'DROP TABLE {schema}.{table} CASCADE'; "
+            "END IF; END $$;")
+
+    def create_unlogged_table_as_query(self, table, query):
+        return f"create unlogged table {table} as {query};"
+
+    def create_unlogged_table_like(self, table, like_table):
+        return f"create unlogged table {table} (like {like_table});"
+
+    def insert_into_table_select_columns_from_query(self, table, columns, query):
+        return f"insert into {table} ({columns}) select {columns} from ({query}) as q;"
+
+    def select_except_all_existence_flags(self, left_table, right_table):
+        only_left = self.get_star_from_except_all_get_star_from(left_table, right_table)
+        only_right = self.get_star_from_except_all_get_star_from(right_table, left_table)
+        return (f"select exists(select 1 from {only_left} as x)::int, "
+                f"exists(select 1 from {only_right} as y)::int;")

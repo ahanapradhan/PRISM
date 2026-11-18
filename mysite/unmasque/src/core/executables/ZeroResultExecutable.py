@@ -38,7 +38,8 @@ class ZeroResultExecutable(Executable):
         q = self._strip_query_terminator(query)
         # LIMIT 2 keeps the "exactly one all-zero/all-None row means empty"
         # rule of isQ_result_empty detectable while transferring at most 2 rows.
-        res = self.doJob(f"SELECT q.* FROM ({q}) AS q LIMIT 2;")
+        res = self.doJob(
+            self.connectionHelper.queries.select_limited_rows_from_query(q, 2))
         if not self.done or not isinstance(res, list):
             return False
         return self.isQ_result_empty(res)

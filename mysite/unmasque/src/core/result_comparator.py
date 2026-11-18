@@ -31,7 +31,8 @@ class ResultComparator(Comparator):
             self.r_e, self.get_fully_qualified_table_name(self.r_e)).rstrip().rstrip(';')
         query_r_h = self.connectionHelper.queries.hashtext_query(
             self.r_h, self.get_fully_qualified_table_name(self.r_h)).rstrip().rstrip(';')
-        row = self.connectionHelper.execute_sql_fetchone(f"select ({query_r_e}), ({query_r_h});")
+        row = self.connectionHelper.execute_sql_fetchone(
+            self.connectionHelper.queries.combine_hash_queries(query_r_e, query_r_h))
         if row is None:
             return None, None
         return row[0], row[1]
@@ -65,7 +66,8 @@ class ResultComparator(Comparator):
 
     def _insert_rows(self, qualified_table, header, value_rows):
         self.connectionHelper.execute_sql(
-            [f"INSERT INTO {qualified_table}{header} VALUES {', '.join(value_rows)};"])
+            [self.connectionHelper.queries.insert_values(
+                qualified_table, header, value_rows)])
 
 
 class FinalResultComparator(ResultComparator):
@@ -91,16 +93,8 @@ class FinalResultComparator(ResultComparator):
 
     def _drop_relation(self, table):
         """Drop ``table`` whether it currently exists as a view or a table."""
-        schema = self.connectionHelper.config.schema
-        return (
-            "DO $$ BEGIN "
-            "IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-            f"WHERE n.nspname = '{schema}' AND c.relname = '{table}' AND c.relkind = 'v') THEN "
-            f"EXECUTE 'DROP VIEW {schema}.{table} CASCADE'; "
-            "ELSIF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-            f"WHERE n.nspname = '{schema}' AND c.relname = '{table}') THEN "
-            f"EXECUTE 'DROP TABLE {schema}.{table} CASCADE'; "
-            "END IF; END $$;")
+        return self.connectionHelper.queries.drop_view_or_table_cascade(
+            self.connectionHelper.config.schema, table)
 
     def _r_e_columns(self):
         rows, _ = self.connectionHelper.execute_sql_fetchall(
@@ -123,10 +117,11 @@ class FinalResultComparator(ResultComparator):
         started = time.time()
         q_e = Q_E.strip().rstrip(';')
         self.connectionHelper.execute_sql(
-            [f"set search_path='{self.app.data_schema}';",
+            [self.connectionHelper.queries.set_search_path(self.app.data_schema),
              self._drop_relation(self.r_e)])
         self.row_count_r_e = self._execute_rowcount(
-            f"create unlogged table {self.get_fully_qualified_table_name(self.r_e)} as {q_e};")
+            self.connectionHelper.queries.create_unlogged_table_as_query(
+                self.get_fully_qualified_table_name(self.r_e), q_e))
         self._record("materialize_r_e", started)
         return self.row_count_r_e
 
@@ -136,10 +131,12 @@ class FinalResultComparator(ResultComparator):
         r_h = self.get_fully_qualified_table_name(self.r_h)
         self.connectionHelper.execute_sql(
             [self._drop_relation(self.r_h),
-             f"create unlogged table {r_h} (like {self.get_fully_qualified_table_name(self.r_e)});"])
+             self.connectionHelper.queries.create_unlogged_table_like(
+                 r_h, self.get_fully_qualified_table_name(self.r_e))])
         columns = ", ".join(f'"{col}"' for col in self._r_e_columns())
         self.row_count_r_h = self._execute_rowcount(
-            f"insert into {r_h} ({columns}) select {columns} from ({q_h}) as q;")
+            self.connectionHelper.queries.insert_into_table_select_columns_from_query(
+                r_h, columns, q_h))
         self._record("materialize_r_h", started)
 
     def run_diff_queries(self):
@@ -152,11 +149,8 @@ class FinalResultComparator(ResultComparator):
         started = time.time()
         r_e = self.get_fully_qualified_table_name(self.r_e)
         r_h = self.get_fully_qualified_table_name(self.r_h)
-        only_e = self.connectionHelper.queries.get_star_from_except_all_get_star_from(r_e, r_h)
-        only_h = self.connectionHelper.queries.get_star_from_except_all_get_star_from(r_h, r_e)
         row = self.connectionHelper.execute_sql_fetchone(
-            f"select exists(select 1 from {only_e} as x)::int, "
-            f"exists(select 1 from {only_h} as y)::int;")
+            self.connectionHelper.queries.select_except_all_existence_flags(r_e, r_h))
         self._record("except_exists", started)
         if row is None:
             return None, None

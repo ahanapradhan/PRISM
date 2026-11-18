@@ -43,10 +43,8 @@ class Executable(Base):
 
     def doActualJob(self, args=None):
         query = self.extract_params_from_args(args)
-        if self.data_schema is None:
-            f_query = f"set search_path='{self.connectionHelper.config.schema}'; SET enable_indexscan = on; SET enable_indexonlyscan = on; SET enable_seqscan = off;{query}"
-        else:
-            f_query = f"set search_path='{self.data_schema}'; SET enable_indexscan = on; SET enable_indexonlyscan = on; SET enable_seqscan = off; {query}"
+        schema = self.data_schema or self.connectionHelper.config.schema
+        f_query = self.connectionHelper.queries.wrap_query_for_executable(schema, query)
         result = []
         try:
             start_t = time.time()
@@ -105,7 +103,8 @@ class Executable(Base):
         most one row is transferred instead of the whole result.
         """
         q = self._strip_query_terminator(query)
-        res = self.doJob(f"SELECT q.* FROM ({q}) AS q LIMIT 1;")
+        res = self.doJob(
+            self.connectionHelper.queries.select_limited_rows_from_query(q, 1))
         if not self.done or not isinstance(res, list):
             return False
         return self.isQ_result_empty(res)

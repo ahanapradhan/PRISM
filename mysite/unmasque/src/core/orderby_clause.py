@@ -261,10 +261,8 @@ class OrderBy(GenerationPipeLineBase):
         # for every probe.  Put the overrides after its SETs by prefixing them
         # here, otherwise an index on the GROUP BY key can still feed a sorted
         # GroupAggregate and the artifact survives.
-        confirmation_query = (
-            "SET enable_sort=off; SET enable_hashagg=on; "
-            "SET enable_indexscan=off; SET enable_indexonlyscan=off; "
-            "SET enable_seqscan=on; " + query)
+        confirmation_query = \
+            self.connectionHelper.queries.wrap_query_for_hash_aggregate_confirmation(query)
 
         saved_override = dict(self._candidate_value_override)
         try:
@@ -289,7 +287,8 @@ class OrderBy(GenerationPipeLineBase):
         self.logger.debug(obj.attrib)
         saved_enable_sort = None
         if force_hash_agg:
-            row = self.connectionHelper.execute_sql_fetchone("SHOW enable_sort;")
+            row = self.connectionHelper.execute_sql_fetchone(
+                self.connectionHelper.queries.show_configuration("enable_sort"))
             saved_enable_sort = row[0] if row else 'on'
         key_elt = None
         if obj.attrib in self.joined_attribs:
@@ -370,13 +369,14 @@ class OrderBy(GenerationPipeLineBase):
                     # sorting so the aggregate is a HashAggregate, whose group
                     # order is independent of the candidate's value order.
                     self.connectionHelper.execute_sql(
-                        ["SET enable_sort=off;", "SET enable_hashagg=on;"])
+                        self.connectionHelper.queries.hash_aggregate_probe_settings())
                 try:
                     new_result = self.app.doJob(query)
                 finally:
                     if force_hash_agg:
                         self.connectionHelper.execute_sql(
-                            [f"SET enable_sort={saved_enable_sort};"])
+                            [self.connectionHelper.queries.set_configuration(
+                                "enable_sort", saved_enable_sort)])
                 self.joined_attrib_valDict.clear()
                 self.logger.debug("New Result", k, new_result)
                 if self.app.isQ_result_empty(new_result):
