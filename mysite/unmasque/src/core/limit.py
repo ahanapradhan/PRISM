@@ -37,7 +37,10 @@ class Limit(GenerationPipeLineBase):
 
         gen_dict = {}
 
-        for table in self.core_relations:
+        core_relations = list(self.core_relations)
+        last_relation_index = len(core_relations) - 1
+
+        for relation_index, table in enumerate(core_relations):
             attrib_list = self.global_all_attribs[table]
             attrib_list_str = ",".join(attrib_list)
             att_order = f"({attrib_list_str})"
@@ -58,7 +61,13 @@ class Limit(GenerationPipeLineBase):
                 """
                 fresh_result_card = len(new_result) - self.rmin_card + 2
                 if 4 <= fresh_result_card <= self.no_rows:
-                    if self.limit is not None and self.limit == fresh_result_card - 1:
+                    # A plateau is only conclusive once every core relation has been populated.
+                    # Before that, the result can stop growing simply because a relation that is
+                    # essential for the join has not been filled yet (this made MQ2 report LIMIT 3
+                    # instead of LIMIT 100, depending on the order in which relations are visited).
+                    already_populated_all_relations = relation_index == last_relation_index
+                    if already_populated_all_relations and self.limit is not None \
+                            and self.limit == fresh_result_card - 1:
                         self.limit = fresh_result_card - 1  # excluding the header column
                         self.logger.debug(f"Finalized Limit {self.limit}")
                         break
