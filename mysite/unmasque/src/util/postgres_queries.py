@@ -29,6 +29,15 @@ class PostgresQueries(CommonQueries):
     def get_explain_query(self, sql):
         return f"EXPLAIN {sql}"
 
+    def analyze_table(self, tab):
+        return f"ANALYZE {tab};"
+
+    def drop_schema(self, schema):
+        return f"Drop Schema if exists {schema} cascade;"
+
+    def create_schema(self, schema):
+        return f"Create Schema {schema};"
+
     def drop_table(self, tab):
         return f"drop table if exists {tab};"
 
@@ -64,6 +73,9 @@ class PostgresQueries(CommonQueries):
 
     def get_min_max_ctid(self, tab):
         return f"select min(ctid), max(ctid) from {tab};"
+
+    def select_rows_by_ctid_order(self, tab, limit):
+        return f"select ctid, * from {tab} order by ctid limit {limit};"
 
     def get_min_max_of_col(self, tab, col):
         return f"select min({col}), max({col}) from {tab};"
@@ -164,6 +176,19 @@ class PostgresQueries(CommonQueries):
 
     def insert_into_tab_select_star_fromtab_with_ctid(self, tab, fromtab, ctid):
         return f"Insert into {tab} (Select * from {fromtab} Where ctid = {ctid});"
+
+    def insert_into_tab_select_star_from_ctid_range(self, tab, fromtab, start_ctid, end_ctid=None):
+        """Copy a disjoint ctid page range with reversed physical order.
+
+        ``end_ctid`` is exclusive.  The explicit ``ORDER BY ctid DESC`` makes
+        each worker insert its slice back-to-front; combined with concurrent
+        workers this deliberately changes the physical row order in the
+        destination (working) table compared with the source table.
+        """
+        where = f"ctid >= '{start_ctid}'"
+        if end_ctid is not None:
+            where += f" and ctid < '{end_ctid}'"
+        return f"Insert into {tab} Select * from {fromtab} Where {where} Order By ctid Desc;"
 
     def select_ctid_from_tabname_offset(self, tabname, offset):
         return f"Select ctid from {tabname} offset {offset} Limit 1;"

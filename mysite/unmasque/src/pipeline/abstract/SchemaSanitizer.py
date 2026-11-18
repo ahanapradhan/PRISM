@@ -17,12 +17,13 @@ class SchemaSanitizer:
         self.logger = Log("SchemaSanitizer", connectionHelper.config.log_level)
 
     def remove_footprint(self):
-        self.connectionHelper.execute_sql([f"Drop Schema if exists {self.connectionHelper.config.schema} cascade;"],
-                                          self.logger)
+        self.connectionHelper.execute_sql(
+            [self.connectionHelper.queries.drop_schema(self.connectionHelper.config.schema)], self.logger)
 
     def _create_working_schema(self):
         self.remove_footprint()
-        self.connectionHelper.execute_sql([f"Create Schema {self.connectionHelper.config.schema};"], self.logger)
+        self.connectionHelper.execute_sql(
+            [self.connectionHelper.queries.create_schema(self.connectionHelper.config.schema)], self.logger)
 
     def get_fully_qualified_table_name(self, table):
         return f"{self.connectionHelper.config.schema}.{table}"
@@ -33,9 +34,12 @@ class SchemaSanitizer:
     def set_all_relations(self, relations: List[str]):
         self.all_relations.extend(copy.copy(relations))
 
-    def take_backup(self, tables):
+    def take_backup(self, tables, parallel=True):
+        # Python threads own one connection each, so this also works on Windows
+        # where a native copy helper is unavailable.  Pass parallel=False for
+        # the original serial INSERT ... SELECT behaviour.
         for table in tables:
-            self.backup_one_table(table)
+            self.backup_one_table(table, parallel=parallel)
 
     def sanitize(self):
         self.connectionHelper.begin_transaction()
@@ -96,10 +100,21 @@ class SchemaSanitizer:
         for col in cols:
             self.__create_col_idx_if_not_exists(tab, col)
 
-    def backup_one_table(self, table):
+    def backup_one_table(self, table, parallel=True):
         self.logger.debug(f"Backing up {table}...")
-        self.connectionHelper.begin_transaction()
         self.drop_derived_relations(table)
+        if parallel:
+            # The catalog queries above leave this connection in a transaction.
+            # Commit before worker connections take DDL locks in the schema.
+            self.connectionHelper.commit_transaction()
+            from ...util.threaded_copy import parallel_copy_table
+            parallel_copy_table(self.connectionHelper.config,
+                                self.connectionHelper.config.user_schema,
+                                self.connectionHelper.config.schema, table,
+                                logger=self.logger)
+            self.logger.debug("... done (python threads)")
+            return
+        self.connectionHelper.begin_transaction()
         working_table = self.get_fully_qualified_table_name(table)
         original_table = self.get_original_table_name(table)
         if self.connectionHelper.config.use_index:
