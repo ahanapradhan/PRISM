@@ -135,8 +135,22 @@ def parallel_copy_table(config, source_schema, dest_schema, table,
         control.commit_transaction()
         if copied != rows:
             raise RuntimeError(f"parallel copy of {table} copied {copied} rows, expected {rows}")
+
+        # Build PK/FK indexes on the working copy (LIKE/CTAS do not copy indexes).
+        try:
+            from .index_utils import create_pkfk_indexes
+            idx_s = create_pkfk_indexes(control, table, schema=dest_schema, logger=logger)
+            control.commit_transaction()
+            if logger is not None:
+                logger.debug(f"Built PK/FK indexes for {destination} in {idx_s:.3f}s")
+        except Exception as exc:
+            control.conn.rollback()
+            raise
     except Exception:
-        control.conn.rollback()
+        try:
+            control.conn.rollback()
+        except Exception:
+            pass
         raise
     finally:
         control.closeConnection()

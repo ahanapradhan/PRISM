@@ -1,0 +1,15 @@
+query,minimizer,runs,iterations,cum_p95_exec_s,cum_p95_overhead_s,overall_p95_exec_s,overall_p95_overhead_s
+MQ4,CopyBasedMinimizer,3,22,0.0942,1.039,0.0175,0.2006
+MQ4,ViewMinimizer,3,22,0.177,0.2094,0.034,0.0349
+MQ5,CopyBasedMinimizer,3,81,56.8296,61.7145,0.0983,0.3556
+MQ5,ViewMinimizer,3,82,53.1839,53.3178,5.0349,5.0427
+MQ6,CopyBasedMinimizer,3,24,0.3597,3.2312,0.0774,0.6536
+MQ6,ViewMinimizer,3,24,0.9319,0.9811,0.2353,0.237
+MQ10,CopyBasedMinimizer,3,66,2.1655,7.6776,0.119,0.3631
+MQ10,ViewMinimizer,3,67,2.5479,2.6381,0.1494,0.1517
+MQ11,CopyBasedMinimizer,3,41,0.1442,0.8765,0.0156,0.0982
+MQ11,ViewMinimizer,3,40,0.1729,0.2477,0.0177,0.0218
+MQ17,CopyBasedMinimizer,3,42,0.5399,4.0934,0.0441,0.4374
+MQ17,ViewMinimizer,3,41,0.8264,0.8838,0.092,0.0937
+MQ21,CopyBasedMinimizer,3,63,0.9898,5.4876,0.0871,0.3779
+MQ21,ViewMinimizer,3,62,3.1855,3.2822,0.122,0.1248

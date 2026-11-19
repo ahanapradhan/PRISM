@@ -209,9 +209,8 @@ class PostgresQueries(CommonQueries):
         return f"select sum(hashtext) from (select hashtext({tab}::TEXT) FROM {qualified_name}) as T;"
 
     def wrap_query_for_executable(self, schema, query):
-        return (f"set search_path='{schema}'; "
-                "SET enable_indexscan = on; SET enable_indexonlyscan = on; "
-                f"SET enable_seqscan = off; {query}")
+        # Optimizer hints removed: run with default planner settings.
+        return f"set search_path='{schema}'; {query}"
 
     def select_limited_rows_from_query(self, query, limit):
         return f"SELECT q.* FROM ({query}) AS q LIMIT {limit};"
@@ -219,14 +218,11 @@ class PostgresQueries(CommonQueries):
     def select_nullfree_existence_from_query(self, query):
         return f"SELECT 1 FROM ({query}) AS q WHERE ROW(q.*) IS NOT NULL LIMIT 1;"
 
-    HASH_AGGREGATE_PREFIX = (
-        "SET enable_sort=off; SET enable_hashagg=on; "
-        "SET enable_indexscan=off; SET enable_indexonlyscan=off; "
-        "SET enable_seqscan=on; "
-    )
+    HASH_AGGREGATE_PREFIX = ""
 
     def wrap_query_for_hash_aggregate_confirmation(self, query):
-        return self.HASH_AGGREGATE_PREFIX + query
+        # Optimizer hints removed: run with default planner settings.
+        return query
 
     def show_configuration(self, setting):
         return f"SHOW {setting};"
@@ -235,8 +231,8 @@ class PostgresQueries(CommonQueries):
         return f"SET {setting}={value};"
 
     def hash_aggregate_probe_settings(self):
-        return [self.set_configuration("enable_sort", "off"),
-                self.set_configuration("enable_hashagg", "on")]
+        # Optimizer hints removed: run with default planner settings.
+        return []
 
     def set_search_path(self, schema):
         return f"set search_path='{schema}';"

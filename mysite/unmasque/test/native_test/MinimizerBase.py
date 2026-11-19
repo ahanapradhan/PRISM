@@ -175,7 +175,7 @@ class Minimizer(AppExtractorBase, ABC):
             [queries.create_view_as_select_star_where_ctid(end_ctid, start_ctid,
                         self.get_fully_qualified_table_name(view), self.get_fully_qualified_table_name(tab))],
             self.logger)
-        return {"create_s": perf_counter() - t0, "analyze_s": 0.0}
+        return {"create_s": perf_counter() - t0, "index_s": 0.0, "analyze_s": 0.0}
 
     def _drop_candidate(self, view):
         self.connectionHelper.execute_sql([self.connectionHelper.queries.drop_view(
@@ -211,12 +211,16 @@ class Minimizer(AppExtractorBase, ABC):
             elif result != works:
                 self.logger.error(f"Probe result changed between repetitions (iteration {self.iteration})")
             if measure:
+                create_s = parts.get("create_s", 0.0)
+                index_s = parts.get("index_s", 0.0)
+                analyze_s = parts.get("analyze_s", 0.0)
                 record = {"iteration": self.iteration, "table": view, "rep": rep,
-                          "create_s": round(parts["create_s"], 4),
-                          "analyze_s": round(parts["analyze_s"], 4),
+                          "create_s": round(create_s, 4),
+                          "index_s": round(index_s, 4),
+                          "analyze_s": round(analyze_s, 4),
                           "exec_s": round(exec_s, 4),
                           "drop_s": round(drop_s, 4),
-                          "with_overhead_s": round(parts["create_s"] + parts["analyze_s"]
+                          "with_overhead_s": round(create_s + index_s + analyze_s
                                                    + exec_s + drop_s, 4),
                           "exec_only_s": round(exec_s, 4)}
                 self.timing_records.append(record)
@@ -232,6 +236,14 @@ class Minimizer(AppExtractorBase, ABC):
                                                                  self.get_fully_qualified_table_name(dirty_tab)),
              self.connectionHelper.queries.drop_table_cascade(self.get_fully_qualified_table_name(dirty_tab))],
                                                                     self.logger)
+        try:
+            from ...src.util.index_utils import create_pkfk_indexes
+            idx_s = create_pkfk_indexes(self.connectionHelper, tabname,
+                                        schema=self.connectionHelper.config.schema, logger=self.logger)
+            self.logger.debug(f"Built PK/FK indexes for {tabname} in {idx_s:.3f}s")
+        except Exception as exc:
+            self.logger.error(f"Failed to build PK/FK indexes for {tabname}: {exc}")
+            raise
         core_sizes[tabname] = self.connectionHelper.execute_sql_fetchone_0(
             self.connectionHelper.queries.get_row_count(self.get_fully_qualified_table_name(tabname)), self.logger)
         self.logger.debug("REMAINING TABLE SIZE", core_sizes[tabname])
