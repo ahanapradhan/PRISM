@@ -6,19 +6,25 @@ from mysite.unmasque.src.core.disjunction import (
     Clause,
     CNF,
     DbRestorePoint,
+    PatternKillScaffold,
     StateSnapshot,
     atom_from_legacy_pred,
     atoms_from_or_slot,
     cnf_to_legacy_or_predicates,
     deep_snapshot,
     drop_not_null_sql,
+    gap,
+    is_necessary,
     is_not_true,
     is_true,
     keep_predicate_sql,
     legacy_or_predicates_to_cnf,
+    probes,
     remove_predicate_sql,
     restore_snapshot,
     sat_result,
+    search_atom_numeric,
+    try_null_scaffold,
 )
 from mysite.unmasque.src.util.configParser import Config
 
@@ -183,6 +189,66 @@ class DisjunctionScaffoldingStep2Test(unittest.TestCase):
         rp.drop()
         self.assertEqual(len(conn.executed), 2)
         self.assertEqual(rp.created, [])
+
+
+class DisjunctionScaffoldingStep3Test(unittest.TestCase):
+    def test_gap_and_probes(self):
+        self.assertEqual(gap("x", 5, [], 0, 30), (0, 30))
+        own = [
+            Atom(table="t", col="x", intervals=[(10, 12)]),
+            Atom(table="t", col="x", intervals=[(0, 2)]),
+        ]
+        self.assertEqual(gap("x", 5, own, 0, 30), (2, 10))
+        self.assertEqual(gap("x", 11, own, 0, 30), (11, 11))
+
+        ps = probes("x", 0, 10, step=1, k_interior=4, distinct_values=[3, 3, 7, 15], max_distinct=32)
+        self.assertIn(0, ps)
+        self.assertIn(10, ps)
+        self.assertTrue(all(0 <= p <= 10 for p in ps))
+        self.assertEqual(len(ps), len(set(ps)))
+
+    def test_necessity_and_search_refine(self):
+        nr = is_necessary("x", 0, 10, lambda x, v: False, [1, 2])
+        self.assertTrue(nr.necessary)
+        self.assertIn(nr.witness, (1, 2))
+        nr = is_necessary("x", 0, 10, lambda x, v: True, [1, 2])
+        self.assertFalse(nr.necessary)
+
+        atom = search_atom_numeric(
+            "t", "x", 0, 30, 5, lambda x, v: 3 <= v <= 9, step=1,
+            probe_values=probes("x", 0, 30, 1, 8, list(range(0, 31))),
+        )
+        self.assertEqual(atom.intervals, [(3, 9)])
+
+        atom = search_atom_numeric(
+            "t", "x", 0, 30, 5, lambda x, v: v == 5, step=1,
+            probe_values=probes("x", 0, 30, 1, 8, list(range(0, 31))),
+        )
+        self.assertEqual(atom.intervals, [(5, 5)])
+
+        atom = search_atom_numeric(
+            "t", "x", 0, 30, 2, lambda x, v: v <= 3 or v >= 20, step=1,
+            probe_values=probes("x", 0, 30, 1, 16, list(range(0, 31))),
+        )
+        self.assertEqual(atom.intervals, [(0, 3), (20, 30)])
+
+    def test_try_null_and_pattern_kill_scaffolds(self):
+        state = {"nulled": False, "val": 5}
+        res = try_null_scaffold(
+            "x",
+            lambda x: state.update(nulled=True),
+            lambda: False,
+            lambda x: state.update(nulled=False, val=5),
+        )
+        self.assertFalse(res.sat)
+        self.assertFalse(state["nulled"])
+
+        pk = PatternKillScaffold(max_columns=6)
+        self.assertFalse(pk.should_skip(["a", "b"]))
+        self.assertTrue(pk.should_skip(["a", "b", "c", "d", "e", "f", "g"]))
+        pats = pk.patterns(["a", "b"], choices=("o", "m"))
+        self.assertEqual(len(pats), 4)
+        self.assertEqual(pats[0], {"a": "o", "b": "o"})
 
 
 if __name__ == "__main__":
