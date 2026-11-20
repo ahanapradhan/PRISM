@@ -190,3 +190,37 @@ class PostgresConnectionHelper(AbstractConnectionHelper):
         # finally:
         #    cur.close()
         return prev
+
+    def cancel(self):
+        """Cancel the currently running query on this connection (thread-safe)."""
+        if self.conn is not None:
+            try:
+                self.conn.cancel()
+            except Exception:
+                pass
+
+    def rollback(self):
+        if self.conn is not None:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+
+    def close(self):
+        self.closeConnection()
+
+    @classmethod
+    def create_independent(cls, config, single_worker=True):
+        """Create and connect an independent helper with its own connection."""
+        helper = cls(config)
+        helper.connectUsingParams(single_worker=single_worker)
+        if helper.conn is not None:
+            try:
+                helper.conn.commit()  # close implicit tx from session setup
+            except Exception:
+                try:
+                    helper.conn.rollback()
+                except Exception:
+                    pass
+            helper.conn.autocommit = False
+        return helper

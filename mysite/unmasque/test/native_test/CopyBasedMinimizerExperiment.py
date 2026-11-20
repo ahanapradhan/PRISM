@@ -556,13 +556,33 @@ class CopyBasedMinimizerExperiment(unittest.TestCase):
                     "select pg_postmaster_start_time();")
             except Exception as exc:  # server still down / shutting down
                 last_error = exc
-                self.conn.conn = None
+                try:
+                    self.conn.closeConnection()
+                except Exception:
+                    try:
+                        if getattr(self.conn, "conn", None) is not None:
+                            self.conn.conn.close()
+                    except Exception:
+                        pass
+                    self.conn.conn = None
+                time.sleep(0.25)
+                continue
+            if self.conn.conn is None:
+                last_error = RuntimeError("reconnect completed without an active connection")
                 time.sleep(0.25)
                 continue
             if old_start is None or (current_start is not None and current_start != old_start):
                 return
             # We reached the old postmaster while it was still shutting down.
-            self.conn.closeConnection()
+            try:
+                self.conn.closeConnection()
+            except Exception:
+                try:
+                    if getattr(self.conn, "conn", None) is not None:
+                        self.conn.conn.close()
+                except Exception:
+                    pass
+                self.conn.conn = None
             time.sleep(0.25)
         raise RuntimeError(f"database did not restart within {self.restart_wait_s}s: {last_error}")
 

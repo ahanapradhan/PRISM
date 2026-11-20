@@ -143,5 +143,8 @@ class NullFreeExecutable(Executable):
         res = self.doJob(
             self.connectionHelper.queries.select_nullfree_existence_from_query(q))
         if not self.done or not isinstance(res, list):
-            return False
+            raise RuntimeError(
+                f"{self.extractor_name}: probe execution failed "
+                f"(done={self.done}, result_type={type(res).__name__}, "
+                f"result={res!r}); query execution did not complete")
         return len(res) <= 1    # header only => no fully non-null row

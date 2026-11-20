@@ -41,5 +41,8 @@ class ZeroResultExecutable(Executable):
         res = self.doJob(
             self.connectionHelper.queries.select_limited_rows_from_query(q, 2))
         if not self.done or not isinstance(res, list):
-            return False
+            raise RuntimeError(
+                f"{self.extractor_name}: probe execution failed "
+                f"(done={self.done}, result_type={type(res).__name__}, "
+                f"result={res!r}); query execution did not complete")
         return self.isQ_result_empty(res)
