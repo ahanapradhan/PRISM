@@ -1,6 +1,8 @@
 import copy
 import unittest
 
+from types import SimpleNamespace
+
 from mysite.unmasque.src.core.disjunction import (
     Atom,
     Clause,
@@ -27,6 +29,8 @@ from mysite.unmasque.src.core.disjunction import (
     search_atom_numeric,
     try_null_scaffold,
 )
+from mysite.unmasque.src.core.dataclass.genPipeline_context import GenPipelineContext
+from mysite.unmasque.src.pipeline.fragments.DisjunctionPipeLine import DisjunctionPipeLine
 from mysite.unmasque.src.util.configParser import Config
 
 
@@ -309,6 +313,75 @@ class DisjunctionScaffoldingStep4Test(unittest.TestCase):
         )
         res2 = ex2.extract("dm0")
         self.assertEqual(res2.statuses[0].status, "INCOMPLETE")
+
+
+class _NullLogger:
+    def debug(self, *a, **k): pass
+    def info(self, *a, **k): pass
+    def error(self, *a, **k): pass
+
+
+class _FilterExtractorStub:
+    def __init__(self):
+        self.global_all_attribs = {}
+        self.global_attrib_types = []
+    def get_datatype(self, tab_attrib):
+        return "numeric"
+    def get_dmin_val(self, attrib, tab):
+        return 0
+
+
+class _AoaStub:
+    def __init__(self):
+        self.arithmetic_filters = []
+        self.algebraic_eq_predicates = []
+        self.aoa_predicates = []
+        self.aoa_less_thans = []
+    def do_permanent_mutation(self):
+        return {}
+    def restore_d_min_from_dict(self):
+        return None
+
+
+class _StubDisjunctionPipeline(DisjunctionPipeLine):
+    def __init__(self, returned_predicates, detect_or=True, mode="legacy"):
+        self.OR_CUTOFF = 1000
+        self.logger = _NullLogger()
+        self.connectionHelper = SimpleNamespace(config=SimpleNamespace(detect_or=detect_or, disjunction_mode=mode))
+        self.filter_extractor = SimpleNamespace(get_datatype=lambda ta: "numeric")
+        self.state = []
+        self.all_sizes = {}
+        self.returned_predicates = returned_predicates
+        self.disjunction_cnf = None
+        self.disjunction_statuses = None
+    def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None, expect_populated=True):
+        return True, time_profile
+    def _DisjunctionPipeLine__get_predicates_in_action(self):
+        return self.returned_predicates
+    def process(self, query): pass
+    def doJob(self, query, qe=None): pass
+    def verify_correctness(self, query, result): pass
+    def extract(self, query): pass
+
+
+class DisjunctionScaffoldingStep5Test(unittest.TestCase):
+    def test_genpipeline_context_derives_or_predicates_from_cnf(self):
+        cnf = CNF(clauses=[Clause(atoms=[Atom("t", "x", intervals=[(1, 1)]), Atom("t", "x", intervals=[(2, 2)])])])
+        ctx = GenPipelineContext(["t"], _AoaStub(), _FilterExtractorStub(), {}, None, cnf=cnf)
+        derived = ctx._GenPipelineContext__or_predicates
+        self.assertEqual(len(derived), 1)
+        self.assertEqual(derived[0][0][0:3], ("t", "x", "equal"))
+        self.assertEqual(ctx.cnf, cnf)
+
+    def test_cnf_mode_hook_falls_back_to_legacy_extraction(self):
+        initial = ("t", "x", "range", 1, 5)
+        # returned predicate differs in a non-overlapping way? legacy test expects no new disjunct when overlapping
+        # simulate no new disjunct found
+        p = _StubDisjunctionPipeline([("t", "x", "range", 1, 5)], detect_or=True, mode="cnf")
+        check, _ = p._extract_disjunction([initial], ["t"], "q", None)
+        self.assertTrue(check)
+        self.assertEqual(p.or_predicates, [(initial,)])
+        self.assertIsNone(p.disjunction_cnf)
 
 
 if __name__ == "__main__":
