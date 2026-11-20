@@ -38,6 +38,7 @@ from mysite.unmasque.src.core.disjunction import (
     search_atom_numeric,
     select_route,
     try_null_scaffold,
+    verify_cnf_structure,
 )
 from mysite.unmasque.src.core.dataclass.genPipeline_context import GenPipelineContext
 from mysite.unmasque.src.pipeline.fragments.DisjunctionPipeLine import DisjunctionPipeLine
@@ -460,6 +461,64 @@ class DisjunctionScaffoldingStep6Test(unittest.TestCase):
         obj2.get_s_val_for_textType = lambda a, t: "x"
         obj2.logger = _NullLogger()
         self.assertEqual(GenerationPipeLineBase.get_s_val(obj2, "n", "t"), 10)
+
+
+class DisjunctionScaffoldingStep7Test(unittest.TestCase):
+    def test_extractor_diagnostics_hardening_and_summary(self):
+        sat_state = {"c0": 0}
+
+        def extract_atoms(dm, excluded_attrs, own_atoms):
+            if excluded_attrs == [] and own_atoms == [] and dm == "dm0":
+                return [Atom("t", "x", intervals=[(1, 1)], id="a0")], {"r": 0}
+            if dm == "dm_c0_1":
+                return [Atom("t", "x", intervals=[(2, 2)], id="a1")], {"r": 1}
+            return [], {}
+
+        def exists_satisfier(i, known, cnf, itst):
+            if i == 0:
+                sat_state["c0"] += 1
+                return sat_state["c0"] == 1
+            return False
+
+        ex = CNFDisjunctionExtractor(extract_atoms, exists_satisfier, lambda i, k, c, it: "dm_c0_1" if i == 0 else "dm", max_iters=0, max_retries_zero_atoms=0)
+        self.assertEqual(ex.max_iters, 1)
+        self.assertEqual(ex.max_retries_zero_atoms, 1)
+        res = ex.extract("dm0")
+        self.assertIn("iterations", res.diagnostics)
+        self.assertIn("extract_calls", res.diagnostics)
+        self.assertGreaterEqual(res.diagnostics["extract_calls"], 1)
+        summary = res.summary()
+        self.assertEqual(summary["clauses"], len(res.cnf.clauses))
+        self.assertIn("statuses", summary)
+
+    def test_route_bounds_and_cnf_verification_reporting(self):
+        cnf = CNF(clauses=[Clause(atoms=[Atom("t", "x", intervals=[(1, 1)], id="a1"), Atom("t", "x", intervals=[(2, 2)], id="a2")]),
+                            Clause(atoms=[Atom("t", "y", intervals=[(3, 3)], id="b1")])],
+                  row_of={"a1": {"r": 1}, "b1": {"r": 3}})
+        self.assertEqual(len(list(iter_routes(cnf, max_routes=1))), 1)
+        report = verify_cnf_structure(cnf)
+        self.assertTrue(report["present"])
+        self.assertTrue(report["has_routes"])
+        self.assertEqual(report["clauses"], 2)
+        self.assertGreaterEqual(report["missing_row_snapshots"], 1)  # a2 missing
+
+        bad = CNF(clauses=[Clause(atoms=[]), Clause(atoms=[Atom("t", "z", intervals=[(1, 1)])])])
+        bad_report = verify_cnf_structure(bad)
+        self.assertFalse(bad_report["ok"])
+        self.assertGreaterEqual(bad_report["empty_clauses"], 1)
+
+    def test_pipeline_and_config_diagnostics_defaults(self):
+        p = _StubDisjunctionPipeline([("t", "x", "range", 1, 1)], detect_or=False, mode="legacy")
+        diag = p.get_disjunction_diagnostics()
+        self.assertIn("mode", diag)
+        self.assertFalse(diag["has_cnf"])
+
+        from mysite.unmasque.src.util.configParser import Config
+        c = Config()
+        self.assertEqual(getattr(c, "disjunction_mode", None), "legacy")
+        self.assertTrue(hasattr(c, "disjunction_max_iters"))
+        self.assertTrue(hasattr(c, "disjunction_max_routes"))
+        self.assertTrue(hasattr(c, "disjunction_diagnostics"))
 
 
 if __name__ == "__main__":
