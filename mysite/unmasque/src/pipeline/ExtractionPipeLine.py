@@ -42,6 +42,8 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         self.global_pk_dict = None
         self.pgao_ctx = PGAOcontext()
         self.initiator = None
+        self.disjunction_cnf = None
+        self.disjunction_statuses = None
 
     def _run_initiator(self, query):
         """Run the initiator as its own pipeline stage.
@@ -282,7 +284,8 @@ class ExtractionPipeLine(DisjunctionPipeLine,
         self.logger.debug("aoa post-process.")
         self.genPipelineCtx = GenPipelineContext(core_relations, self.aoa,
                                                  self.filter_extractor, self.global_min_instance_dict,
-                                                 self.or_predicates)
+                                                 self.or_predicates,
+                                                 cnf=getattr(self, 'disjunction_cnf', None))
         self.logger.debug(self.genPipelineCtx.arithmetic_filters)
         self.logger.debug(self.genPipelineCtx.global_join_graph)
         self.logger.debug(self.genPipelineCtx.filter_in_predicates)

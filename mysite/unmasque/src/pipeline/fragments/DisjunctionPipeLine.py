@@ -47,6 +47,9 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         self.global_min_instance_dict = None
         self.key_lists = None
         self.OR_CUTOFF = 1000
+        # CNF disjunction integration scaffolding (non-legacy modes only).
+        self.disjunction_cnf = None
+        self.disjunction_statuses = None
 
     def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None,
                            expect_populated=True):
@@ -198,10 +201,25 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
 
     def _extract_disjunction(self, init_predicates, core_relations, query, time_profile):  # for once
         self.or_predicates = []
+        self.disjunction_cnf = None
+        self.disjunction_statuses = None
         curr_eq_predicates = copy.deepcopy(init_predicates)
         all_eq_predicates = [curr_eq_predicates]
         ids = list(range(len(curr_eq_predicates)))
         if self.connectionHelper.config.detect_or:
+            mode = str(getattr(self.connectionHelper.config, 'disjunction_mode', 'legacy')).lower()
+            if mode in ('cnf', 'robust'):
+                # Non-default CNF mode hook. Full DB-integrated CNF extraction is
+                # wired in subsequent steps; fall back to legacy path on failure
+                # to preserve pipeline operability unless explicitly handled.
+                try:
+                    return self._extract_disjunction_cnf(init_predicates, core_relations, query, time_profile)
+                except Exception as e:
+                    self.logger.error("CNF disjunction extraction failed, falling back to legacy. ", str(e))
+                    self.disjunction_cnf = None
+                    self.disjunction_statuses = None
+                    self.or_predicates = []
+                    all_eq_predicates = [copy.deepcopy(init_predicates)]
             try:
                 time_profile = self.__run_extraction_loop(all_eq_predicates, core_relations, ids, query, time_profile)
             except UnmasqueError as e:
@@ -215,6 +233,15 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
                 return False, time_profile
         self.or_predicates = list(zip(*all_eq_predicates))
         return True, time_profile
+
+    def _extract_disjunction_cnf(self, init_predicates, core_relations, query, time_profile):
+        """CNF-mode extraction hook (scaffold).
+
+        Step 5 wires pipeline/context integration points; full DB-integrated
+        clause extraction callbacks are implemented in later steps. By default
+        this raises to trigger safe fallback to the legacy path.
+        """
+        raise NotImplementedError("CNF disjunction extraction integration not implemented yet")
 
     def __run_extraction_loop(self, all_eq_predicates, core_relations, ids, query, time_profile):
         converged = False

@@ -137,7 +137,8 @@ class GenPipelineContext:
                  aoa_extractor: InequalityPredicate,
                  filter_extractor: Filter,
                  global_min_instance_dict: dict,
-                 or_predicates):
+                 or_predicates,
+                 cnf=None):
         self.core_relations = core_relations
         self.global_all_attribs = filter_extractor.global_all_attribs
         self.attrib_types_dict = None
@@ -146,7 +147,18 @@ class GenPipelineContext:
         self.__aoa_attribs = None
         self.arithmetic_filters = aoa_extractor.arithmetic_filters
         self.global_min_instance_dict = copy.deepcopy(global_min_instance_dict)
+        self.cnf = cnf
         self.__or_predicates = or_predicates
+        # Backward-compatible flattening: if legacy slots are absent but CNF is
+        # provided, derive slot-wise alternatives for existing downstream logic.
+        if (not self.__or_predicates) and self.cnf is not None:
+            try:
+                from ..disjunction.model import cnf_to_legacy_or_predicates
+                self.__or_predicates = cnf_to_legacy_or_predicates(self.cnf)
+            except Exception:
+                self.__or_predicates = or_predicates or []
+        if self.__or_predicates is None:
+            self.__or_predicates = []
         self.filter_in_predicates = []
 
         self.__algebraic_eq_predicates = aoa_extractor.algebraic_eq_predicates
