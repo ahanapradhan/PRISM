@@ -42,6 +42,9 @@ class Config:
         self.detect_oj = False
         self.use_cs2 = False
         self.scale_down = False
+        # Disjunction/CNF extraction mode scaffolding (step 1, inert by default).
+        # 'legacy' preserves current detect_or behavior.
+        self.disjunction_mode = "legacy"
         self.app_type = ApplicationType.SQL_ERR_FWD
         self.database = "postgres"
         self.table_sizes_dict = {}
@@ -110,6 +113,17 @@ class Config:
             self.detect_or = False
         elif detect_or.lower() == "yes":
             self.detect_or = True
+
+        # Optional scaffolding flag for future CNF disjunction implementation.
+        # Kept backward-compatible: missing/unknown values default to legacy.
+        try:
+            disjunction_mode = config_object.get(FEATURE_SECTION, "disjunction_mode", fallback="legacy")
+            if str(disjunction_mode).lower() in ("legacy", "cnf", "robust"):
+                self.disjunction_mode = str(disjunction_mode).lower()
+            else:
+                self.disjunction_mode = "legacy"
+        except Exception:
+            self.disjunction_mode = "legacy"
 
         detect_oj = config_object.get(FEATURE_SECTION, DETECT_OJ)
         if detect_oj.lower() == "no":
