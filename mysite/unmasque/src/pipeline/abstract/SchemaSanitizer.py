@@ -23,6 +23,9 @@ class SchemaSanitizer:
     def _create_working_schema(self):
         self.remove_footprint()
         self.connectionHelper.execute_sql([f"Create Schema {self.connectionHelper.config.schema};"], self.logger)
+        # Commit so the schema survives later rollbacks (e.g. FromClause probing)
+        # and is visible to independent connections such as parallel backup workers.
+        self.connectionHelper.commit_transaction()
 
     def get_fully_qualified_table_name(self, table):
         return f"{self.connectionHelper.config.schema}.{table}"
