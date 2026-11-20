@@ -184,9 +184,7 @@ class PostgresQueries(CommonQueries):
         return f"select sum(hashtext) from (select hashtext({tab}::TEXT) FROM {qualified_name}) as T;"
 
     def wrap_query_for_executable(self, schema, query):
-        return (f"set search_path='{schema}'; "
-                "SET enable_indexscan = on; SET enable_indexonlyscan = on; "
-                f"SET enable_seqscan = off; {query}")
+        return f"set search_path='{schema}'; {query}"
 
     def select_limited_rows_from_query(self, query, limit):
         return f"SELECT q.* FROM ({query}) AS q LIMIT {limit};"
@@ -196,8 +194,6 @@ class PostgresQueries(CommonQueries):
 
     HASH_AGGREGATE_PREFIX = (
         "SET enable_sort=off; SET enable_hashagg=on; "
-        "SET enable_indexscan=off; SET enable_indexonlyscan=off; "
-        "SET enable_seqscan=on; "
     )
 
     def wrap_query_for_hash_aggregate_confirmation(self, query):

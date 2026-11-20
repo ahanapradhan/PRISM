@@ -1,4 +1,5 @@
 import ast
+import copy
 import logging
 import math
 
@@ -182,76 +183,87 @@ class Aggregation(GenerationPipeLineBase):
 
                 groupby_key_flag = attrib in joined_attrib_set and attrib in groupby_set
                 if result_index_list:
-                    datatype = self.get_datatype((tabname, attrib))
-                    a, base_agg_array, b, k_value = get_k_value(attrib, self.filter_attrib_dict,
-                                                                groupby_key_flag, tabname, datatype, c)
-                for result_index in result_index_list:
-                    agg_array = base_agg_array
-                    self.truncate_core_relations()
-                    temp_vals = []
-                    max_no_of_rows = self.insert_for_inner(a, attrib, b, k_value, key_list, tabname, temp_vals,
-                                                           result_index)
-                    if debug_enabled:
-                        self.logger.debug(self.dependencies, result_index,
-                                          key_list, tabname, temp_vals, result_index)
-
-                    if len(self.solution[result_index]) > 1:
-                        if debug_enabled:
-                            self.logger.debug("Temp values", temp_vals)  # FOR DEBUG
-                        s = 0
-                        mi = max_int_val
-                        ma = min_int_val
-                        temp_ar = []
-                        local_sol = self.solution[result_index]
-                        for ele in self.dependencies[result_index]:
-                            local_tabname = ele[0]
-                            local_attrib = ele[1]
-                            local_attrib_index = attrib_index_by_tab[local_tabname][local_attrib]
-                            vals_sp = temp_vals[core_relation_index[local_tabname]]
-                            l = [row[local_attrib_index] for row in vals_sp]
-                            temp_ar.append((local_attrib, l))
-                        temp_ar = sorted(temp_ar, key=lambda x: x[0])
-                        if debug_enabled:
-                            self.logger.debug("Temp Arr", temp_ar)  # FOR DEBUG
-                        for t in range(len(temp_ar)):
-                            if len(temp_ar[t][1]) < max_no_of_rows:
-                                temp_ar[t][1].extend(
-                                    [temp_ar[t][1][0]] * (max_no_of_rows - len(temp_ar[t][1])))
-                        for _row in range(max_no_of_rows):
-                            inter_val = [float(temp_ar[j][1][_row])
-                                         for j in range(len(self.dependencies[result_index]))]
-
-                            temp_arr = get_param_values_external(inter_val)
+                    prev_route = self.cnf_route
+                    prev_pins = copy.deepcopy(getattr(self, 'cnf_pin_values', {}) or {})
+                    if self.has_structured_cnf():
+                        route = self.get_cnf_freeing_route_for_attr((tabname, attrib)) or self.cnf_route
+                        self.set_cnf_probe_route(route)
+                    try:
+                        datatype = self.get_datatype((tabname, attrib))
+                        a, base_agg_array, b, k_value = self._get_k_value_cnf_aware(
+                            attrib, groupby_key_flag, tabname, datatype, c)
+                        for result_index in result_index_list:
+                            agg_array = base_agg_array
+                            self.truncate_core_relations()
+                            temp_vals = []
+                            max_no_of_rows = self.insert_for_inner(a, attrib, b, k_value, key_list, tabname, temp_vals,
+                                                                   result_index)
                             if debug_enabled:
-                                self.logger.debug("Coeffs", temp_arr, local_sol)  # FOR DEBUG
-                            inter_val = list(temp_arr) + [1]
-                            if debug_enabled:
-                                self.logger.debug("Intermediate Values of all", inter_val)  # FOR DEBUG
-                            eqn = sum(val * local_sol[j][0] for j, val in enumerate(inter_val))
-                            # print("Expression", eqn) # FOR DEBUG
-                            s += eqn
-                            mi = min(mi, eqn)
-                            ma = max(ma, eqn)
-                        if debug_enabled:
-                            self.logger.debug("no_of_rows ", max_no_of_rows)
-                        av = (s / max_no_of_rows)
-                        if debug_enabled:
-                            self.logger.debug("Temp Array", temp_ar)
-                            self.logger.debug("SUM, AVG, MIN, MAX", s, av, mi, ma)
-                        agg_array = [SUM, s, AVG, av, MIN, mi, MAX, ma, COUNT, max_no_of_rows]
-                    new_result = self.app.doJob(query)
-                    if debug_enabled:
-                        self.logger.debug("New Result", new_result)  # FOR DEBUG
-                        self.logger.debug("Comaparison", agg_array)  # FOR DEBUG
-                    if self.app.isQ_result_empty(new_result):
-                        self.logger.error('some error in generating new database. '
-                                          'Result is empty. Can not identify aggregation')
-                        return False
-                    nullfree_rows = self.app.get_all_nullfree_rows(new_result)
-                    if len(nullfree_rows) > 1:
-                        continue
+                                self.logger.debug(self.dependencies, result_index,
+                                                  key_list, tabname, temp_vals, result_index)
 
-                    self.analyze(agg_array, self.global_projected_attributes[result_index], nullfree_rows, result_index)
+                            if len(self.solution[result_index]) > 1:
+                                if debug_enabled:
+                                    self.logger.debug("Temp values", temp_vals)  # FOR DEBUG
+                                s = 0
+                                mi = max_int_val
+                                ma = min_int_val
+                                temp_ar = []
+                                local_sol = self.solution[result_index]
+                                for ele in self.dependencies[result_index]:
+                                    local_tabname = ele[0]
+                                    local_attrib = ele[1]
+                                    local_attrib_index = attrib_index_by_tab[local_tabname][local_attrib]
+                                    vals_sp = temp_vals[core_relation_index[local_tabname]]
+                                    l = [row[local_attrib_index] for row in vals_sp]
+                                    temp_ar.append((local_attrib, l))
+                                temp_ar = sorted(temp_ar, key=lambda x: x[0])
+                                if debug_enabled:
+                                    self.logger.debug("Temp Arr", temp_ar)  # FOR DEBUG
+                                for t in range(len(temp_ar)):
+                                    if len(temp_ar[t][1]) < max_no_of_rows:
+                                        temp_ar[t][1].extend(
+                                            [temp_ar[t][1][0]] * (max_no_of_rows - len(temp_ar[t][1])))
+                                for _row in range(max_no_of_rows):
+                                    inter_val = [float(temp_ar[j][1][_row])
+                                                 for j in range(len(self.dependencies[result_index]))]
+
+                                    temp_arr = get_param_values_external(inter_val)
+                                    if debug_enabled:
+                                        self.logger.debug("Coeffs", temp_arr, local_sol)  # FOR DEBUG
+                                    inter_val = list(temp_arr) + [1]
+                                    if debug_enabled:
+                                        self.logger.debug("Intermediate Values of all", inter_val)  # FOR DEBUG
+                                    eqn = sum(val * local_sol[j][0] for j, val in enumerate(inter_val))
+                                    # print("Expression", eqn) # FOR DEBUG
+                                    s += eqn
+                                    mi = min(mi, eqn)
+                                    ma = max(ma, eqn)
+                                if debug_enabled:
+                                    self.logger.debug("no_of_rows ", max_no_of_rows)
+                                av = (s / max_no_of_rows)
+                                if debug_enabled:
+                                    self.logger.debug("Temp Array", temp_ar)
+                                    self.logger.debug("SUM, AVG, MIN, MAX", s, av, mi, ma)
+                                agg_array = [SUM, s, AVG, av, MIN, mi, MAX, ma, COUNT, max_no_of_rows]
+                            new_result = self.app.doJob(query)
+                            if debug_enabled:
+                                self.logger.debug("New Result", new_result)  # FOR DEBUG
+                                self.logger.debug("Comaparison", agg_array)  # FOR DEBUG
+                            if self.app.isQ_result_empty(new_result):
+                                self.logger.error('some error in generating new database. '
+                                                  'Result is empty. Can not identify aggregation')
+                                return False
+                            nullfree_rows = self.app.get_all_nullfree_rows(new_result)
+                            if len(nullfree_rows) > 1:
+                                continue
+
+                            self.analyze(agg_array, self.global_projected_attributes[result_index], nullfree_rows, result_index)
+                    finally:
+                        if self.has_structured_cnf():
+                            self.cnf_route = prev_route
+                            self.cnf_pin_values = copy.deepcopy(prev_pins)
+                            self.set_cnf_probe_route(prev_route)
 
         for i in range(len(self.global_projected_attributes)):
             if self.global_projected_attributes[i] == '':
@@ -351,3 +363,45 @@ class Aggregation(GenerationPipeLineBase):
             if check_value == agg_array[j + 1]:
                 self.global_aggregated_attributes[result_index] = (str(attrib), agg_array[j])
                 break
+
+    def _get_k_value_cnf_aware(self, attrib, groupby_key_flag, tabname, datatype, c):
+        key = (tabname, attrib)
+        if self.has_structured_cnf():
+            try:
+                domain = self.get_cnf_attr_domain(key, route=self.cnf_route)
+            except Exception:
+                domain = None
+            if domain is not None:
+                kind = getattr(domain, 'kind', None)
+                if kind == 'pinned':
+                    vals = getattr(domain, 'values', []) or []
+                    v = vals[0] if vals else None
+                    if v is not None:
+                        if datatype in NUMBER_TYPES:
+                            k_value = 1
+                            agg_array = [SUM, k_value * v + v, AVG, v, MIN, v, MAX, v, COUNT, k_value + 1]
+                            return v, agg_array, v, k_value
+                        k_value = 1
+                        return v, [MIN, v, MAX, v], v, k_value
+                elif kind == 'union':
+                    vals = self.get_cnf_distinct_values(key, count=2, route=self.cnf_route)
+                    if len(vals) >= 2:
+                        a, b = vals[0], vals[1]
+                        if datatype in NUMBER_TYPES:
+                            try:
+                                an, bn = float(a), float(b)
+                                if an == 0 and bn != 0:
+                                    a, b = b, a
+                                k_value, agg_array = get_k_value_for_number(a, b)
+                            except Exception:
+                                k_value = 1
+                                agg_array = [MIN, min(a, b), MAX, max(a, b)]
+                        elif datatype == 'date':
+                            k_value = 1
+                            agg_array = [MIN, min(a, b), MAX, max(a, b)]
+                        else:
+                            k_value = 1
+                            agg_array = [MIN, min(a, b), MAX, max(a, b)]
+                        return a, agg_array, b, k_value
+                # free/other: fall through to legacy
+        return get_k_value(attrib, self.filter_attrib_dict, groupby_key_flag, tabname, datatype, c)

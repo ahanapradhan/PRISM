@@ -384,15 +384,17 @@ class DisjunctionScaffoldingStep5Test(unittest.TestCase):
         self.assertEqual(derived[0][0][0:3], ("t", "x", "equal"))
         self.assertEqual(ctx.cnf, cnf)
 
-    def test_cnf_mode_hook_falls_back_to_legacy_extraction(self):
+    def test_cnf_mode_hook_extracts_structured_cnf_and_legacy_or_predicates(self):
         initial = ("t", "x", "range", 1, 5)
-        # returned predicate differs in a non-overlapping way? legacy test expects no new disjunct when overlapping
-        # simulate no new disjunct found
+        # simulate no new disjunct found; CNF extraction should be DB-integrated/wired
+        # and produce a structured CNF while preserving legacy-compatible or_predicates.
         p = _StubDisjunctionPipeline([("t", "x", "range", 1, 5)], detect_or=True, mode="cnf")
         check, _ = p._extract_disjunction([initial], ["t"], "q", None)
         self.assertTrue(check)
         self.assertEqual(p.or_predicates, [(initial,)])
-        self.assertIsNone(p.disjunction_cnf)
+        self.assertIsNotNone(p.disjunction_cnf)
+        self.assertTrue(len(getattr(p.disjunction_cnf, "clauses", [])) >= 1)
+        self.assertIsNotNone(p.disjunction_statuses)
 
 
 class DisjunctionScaffoldingStep6Test(unittest.TestCase):

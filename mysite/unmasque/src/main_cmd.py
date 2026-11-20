@@ -1359,6 +1359,122 @@ if __name__ == '__main__':
                  for m, s in TPCDS_6B_SIZES.items()]
     workload += [TestQuery(f"IJ{k}", ij_chain(k), False, False, False, False, False)
                  for k in range(1, 8)]
+    # Disjunction stress-test workload (20 queries)
+    # flags: TestQuery(name, hidden_query, cs2, union, oj, nep, orf=None)
+    workload += [
+        # --- 10 pure disjunction (orf=True) ---
+        TestQuery("DISJ1",
+                  "SELECT p_partkey, p_name, p_size FROM part "
+                  "WHERE p_size IN (3, 7, 15);",
+                  False, False, False, False, True),
+        TestQuery("DISJ2",
+                  "SELECT s_suppkey, s_name, s_nationkey FROM supplier "
+                  "WHERE s_nationkey IN (1, 5, 10);",
+                  False, False, False, False, True),
+        TestQuery("DISJ3",
+                  "SELECT c_custkey, c_name, c_mktsegment FROM customer "
+                  "WHERE c_mktsegment = 'BUILDING' OR c_mktsegment = 'AUTOMOBILE';",
+                  False, False, False, False, True),
+        TestQuery("DISJ4",
+                  "SELECT p_partkey, p_name, p_retailprice FROM part "
+                  "WHERE p_size = 10 OR p_retailprice > 1500.00;",
+                  False, False, False, False, True),
+        TestQuery("DISJ5",
+                  "SELECT o_orderkey, o_totalprice, o_orderpriority FROM orders "
+                  "WHERE o_orderstatus = 'F' AND "
+                  "(o_orderpriority = '1-URGENT' OR o_orderpriority = '2-HIGH');",
+                  False, False, False, False, True),
+        TestQuery("DISJ6",
+                  "SELECT p_partkey, p_name, p_brand FROM part "
+                  "WHERE p_brand = 'Brand#12' OR p_brand = 'Brand#23' OR p_brand = 'Brand#34';",
+                  False, False, False, False, True),
+        TestQuery("DISJ7",
+                  "SELECT c_name, o_orderkey, o_totalprice FROM customer, orders "
+                  "WHERE c_custkey = o_custkey AND "
+                  "(c_mktsegment = 'BUILDING' OR c_mktsegment = 'MACHINERY');",
+                  False, False, False, False, True),
+        TestQuery("DISJ8",
+                  "SELECT n_name, s_name, s_acctbal FROM nation, supplier "
+                  "WHERE n_nationkey = s_nationkey AND "
+                  "(n_name = 'FRANCE' OR n_name = 'GERMANY');",
+                  False, False, False, False, True),
+        TestQuery("DISJ9",
+                  "SELECT l_orderkey, l_linenumber, l_quantity FROM lineitem "
+                  "WHERE l_quantity = 10 OR l_quantity = 20 OR l_quantity = 30;",
+                  False, False, False, False, True),
+        TestQuery("DISJ10",
+                  "SELECT p_name, ps_supplycost, p_container FROM part, partsupp "
+                  "WHERE p_partkey = ps_partkey AND p_size > 10 AND "
+                  "(p_container = 'SM CASE' OR p_container = 'LG BOX' OR p_container = 'MED PACK');",
+                  False, False, False, False, True),
+
+        # --- 3 disjunction with NEP (nep=True, orf=True) ---
+        TestQuery("DISJ_NEP1",
+                  "SELECT p_partkey, p_name, p_size FROM part "
+                  "WHERE p_brand <> 'Brand#13' AND (p_size = 10 OR p_size = 20);",
+                  False, False, False, True, True),
+        TestQuery("DISJ_NEP2",
+                  "SELECT s_suppkey, s_name, s_acctbal FROM supplier "
+                  "WHERE s_acctbal > 5000 AND s_nationkey <> 22 AND "
+                  "(s_nationkey = 1 OR s_nationkey = 2 OR s_nationkey = 3);",
+                  False, False, False, True, True),
+        TestQuery("DISJ_NEP3",
+                  "SELECT c_custkey, c_name, o_orderpriority FROM customer, orders "
+                  "WHERE c_custkey = o_custkey AND c_mktsegment <> 'AUTOMOBILE' AND "
+                  "(o_orderpriority = '1-URGENT' OR o_orderpriority = '2-HIGH');",
+                  False, False, False, True, True),
+
+        # --- 3 disjunction with outer join (oj=True, orf=True) ---
+        TestQuery("DISJ_OJ1",
+                  "SELECT c_custkey, c_name, o_orderkey FROM customer "
+                  "LEFT OUTER JOIN orders ON c_custkey = o_custkey "
+                  "WHERE c_mktsegment = 'BUILDING' OR c_mktsegment = 'FURNITURE';",
+                  False, False, True, False, True),
+        TestQuery("DISJ_OJ2",
+                  "SELECT n_name, s_name, s_acctbal FROM nation "
+                  "LEFT OUTER JOIN supplier ON n_nationkey = s_nationkey "
+                  "WHERE n_name = 'FRANCE' OR n_name = 'GERMANY';",
+                  False, False, True, False, True),
+        TestQuery("DISJ_OJ3",
+                  "SELECT c_name, o_orderkey, o_totalprice FROM customer "
+                  "LEFT OUTER JOIN orders ON c_custkey = o_custkey "
+                  "WHERE c_nationkey = 1 OR c_nationkey = 2;",
+                  False, False, True, False, True),
+
+        # --- 4 disjunction with union (union=True, orf=True) ---
+        TestQuery("DISJ_UN1",
+                  "(SELECT p_partkey, p_name FROM part "
+                  "WHERE p_size = 10 OR p_size = 20) "
+                  "UNION ALL "
+                  "(SELECT s_suppkey, s_name FROM supplier "
+                  "WHERE s_nationkey = 1 OR s_nationkey = 2);",
+                  False, True, False, False, True),
+        TestQuery("DISJ_UN2",
+                  "(SELECT c_custkey, c_name FROM customer "
+                  "WHERE c_mktsegment IN ('BUILDING', 'MACHINERY')) "
+                  "UNION ALL "
+                  "(SELECT s_suppkey, s_name FROM supplier "
+                  "WHERE s_acctbal > 5000 AND s_nationkey IN (3, 4));",
+                  False, True, False, False, True),
+        TestQuery("DISJ_UN3",
+                  "(SELECT c_name, o_orderkey FROM customer, orders "
+                  "WHERE c_custkey = o_custkey AND "
+                  "(o_orderpriority = '1-URGENT' OR o_orderpriority = '2-HIGH')) "
+                  "UNION ALL "
+                  "(SELECT n_name, s_suppkey FROM nation, supplier "
+                  "WHERE n_nationkey = s_nationkey AND "
+                  "(n_name = 'FRANCE' OR n_name = 'GERMANY'));",
+                  False, True, False, False, True),
+        TestQuery("DISJ_UN4",
+                  "(SELECT p_partkey, p_name FROM part "
+                  "WHERE p_brand = 'Brand#12' OR p_brand = 'Brand#23' OR p_container = 'SM BOX') "
+                  "UNION ALL "
+                  "(SELECT ps_partkey, ps_comment FROM partsupp "
+                  "WHERE ps_availqty > 100 AND "
+                  "(ps_supplycost < 100.00 OR ps_supplycost > 900.00));",
+                  False, True, False, False, True),
+    ]
+
     workload += [TestQuery("demo", """
     (
     SELECT

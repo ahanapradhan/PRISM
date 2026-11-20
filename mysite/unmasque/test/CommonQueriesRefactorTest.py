@@ -89,8 +89,7 @@ class QueryBuilderContractTest(unittest.TestCase):
         queries = PostgresQueries()
 
         self.assertEqual(
-            "set search_path='fresh'; SET enable_indexscan = on; "
-            "SET enable_indexonlyscan = on; SET enable_seqscan = off; select 1;",
+            "set search_path='fresh'; select 1;",
             queries.wrap_query_for_executable("fresh", "select 1;"))
         self.assertEqual(
             "SELECT q.* FROM (select 1) AS q LIMIT 1;",
@@ -111,9 +110,7 @@ class QueryBuilderContractTest(unittest.TestCase):
         queries = PostgresQueries()
 
         self.assertEqual(
-            "SET enable_sort=off; SET enable_hashagg=on; "
-            "SET enable_indexscan=off; SET enable_indexonlyscan=off; "
-            "SET enable_seqscan=on; select 1;",
+            "SET enable_sort=off; SET enable_hashagg=on; select 1;",
             queries.wrap_query_for_hash_aggregate_confirmation("select 1;"))
         self.assertEqual(["SET enable_sort=off;", "SET enable_hashagg=on;"],
                          queries.hash_aggregate_probe_settings())

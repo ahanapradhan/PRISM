@@ -31,55 +31,65 @@ class Limit(GenerationPipeLineBase):
         pre_assignment = self.__get_pre_assignment()
         gb_tab_attribs = [(self.find_tabname_for_given_attrib(attrib), attrib)
                           for attrib in self.global_groupby_attributes]
+        prev_route = self.cnf_route
+        prev_pins = copy.deepcopy(getattr(self, 'cnf_pin_values', {}) or {})
+        if self.has_structured_cnf():
+            self.set_cnf_probe_route(self.cnf_route)
 
-        total_combinations = 1
-        self.__decide_number_of_rows(gb_tab_attribs, grouping_attribute_values, pre_assignment, total_combinations)
+        try:
+            total_combinations = 1
+            self.__decide_number_of_rows(gb_tab_attribs, grouping_attribute_values, pre_assignment, total_combinations)
 
-        gen_dict = {}
+            gen_dict = {}
 
-        core_relations = list(self.core_relations)
-        last_relation_index = len(core_relations) - 1
+            core_relations = list(self.core_relations)
+            last_relation_index = len(core_relations) - 1
 
-        for relation_index, table in enumerate(core_relations):
-            attrib_list = self.global_all_attribs[table]
-            attrib_list_str = ",".join(attrib_list)
-            att_order = f"({attrib_list_str})"
-            insert_rows = []
-            for k in range(self.no_rows):
-                self.__determine_k_insert_rows(attrib_list, gb_tab_attribs, grouping_attribute_values, insert_rows,
-                                               k, table)
-            self.insert_attrib_vals_into_table(att_order, attrib_list, insert_rows, table, insert_logger=False)
-            gen_dict[table] = insert_rows
+            for relation_index, table in enumerate(core_relations):
+                attrib_list = self.global_all_attribs[table]
+                attrib_list_str = ",".join(attrib_list)
+                att_order = f"({attrib_list_str})"
+                insert_rows = []
+                for k in range(self.no_rows):
+                    self.__determine_k_insert_rows(attrib_list, gb_tab_attribs, grouping_attribute_values, insert_rows,
+                                                   k, table)
+                self.insert_attrib_vals_into_table(att_order, attrib_list, insert_rows, table, insert_logger=False)
+                gen_dict[table] = insert_rows
 
-            new_result = self.app.doJob(query)
-            if not self.app.isQ_result_empty(new_result):
-                """                 
-                ideally dmin at the start of proj module should produce 2 row result. header + 1 row data
-                but, union + outer join may cause extra invalid data.
-                all of them cannot be discarded simply due to having NULL values
-                So, assuming ideal data at proj module start, calculating the valid rows in other modules
-                """
-                fresh_result_card = len(new_result) - self.rmin_card + 2
-                if 4 <= fresh_result_card <= self.no_rows:
-                    # A plateau is only conclusive once every core relation has been populated.
-                    # Before that, the result can stop growing simply because a relation that is
-                    # essential for the join has not been filled yet (this made MQ2 report LIMIT 3
-                    # instead of LIMIT 100, depending on the order in which relations are visited).
-                    already_populated_all_relations = relation_index == last_relation_index
-                    if already_populated_all_relations and self.limit is not None \
-                            and self.limit == fresh_result_card - 1:
-                        self.limit = fresh_result_card - 1  # excluding the header column
-                        self.logger.debug(f"Finalized Limit {self.limit}")
-                        break
+                new_result = self.app.doJob(query)
+                if not self.app.isQ_result_empty(new_result):
+                    """
+                    ideally dmin at the start of proj module should produce 2 row result. header + 1 row data
+                    but, union + outer join may cause extra invalid data.
+                    all of them cannot be discarded simply due to having NULL values
+                    So, assuming ideal data at proj module start, calculating the valid rows in other modules
+                    """
+                    fresh_result_card = len(new_result) - self.rmin_card + 2
+                    if 4 <= fresh_result_card <= self.no_rows:
+                        # A plateau is only conclusive once every core relation has been populated.
+                        # Before that, the result can stop growing simply because a relation that is
+                        # essential for the join has not been filled yet (this made MQ2 report LIMIT 3
+                        # instead of LIMIT 100, depending on the order in which relations are visited).
+                        already_populated_all_relations = relation_index == last_relation_index
+                        if already_populated_all_relations and self.limit is not None \
+                                and self.limit == fresh_result_card - 1:
+                            self.limit = fresh_result_card - 1  # excluding the header column
+                            self.logger.debug(f"Finalized Limit {self.limit}")
+                            break
+                        else:
+                            self.limit = fresh_result_card - 1  # excluding the header column
+                            self.logger.debug(f"Limit {self.limit}")
                     else:
-                        self.limit = fresh_result_card - 1  # excluding the header column
-                        self.logger.debug(f"Limit {self.limit}")
-                else:
-                    if self.limit is not None:
-                        self.limit = None
-                        self.logger.debug(f"Result is growing. Limit may be larger than {self.no_rows}")
-                        break
-        return True
+                        if self.limit is not None:
+                            self.limit = None
+                            self.logger.debug(f"Result is growing. Limit may be larger than {self.no_rows}")
+                            break
+            return True
+        finally:
+            if self.has_structured_cnf():
+                self.cnf_route = prev_route
+                self.cnf_pin_values = copy.deepcopy(prev_pins)
+                self.set_cnf_probe_route(prev_route)
 
     def __determine_k_insert_rows(self, attrib_list_inner, gb_tab_attribs, grouping_attribute_values, insert_rows, k,
                                   tabname_inner):
@@ -145,13 +155,22 @@ class Limit(GenerationPipeLineBase):
     def __compute_total_values(self, datatype, elt, total_combinations):
         tot_values = 0
         for in_pred in self.filter_in_predicates:
+            if not in_pred or len(in_pred) < 4:
+                continue
+            if str(in_pred[2]).upper() in ('OR_CLAUSE', 'OR') and in_pred[0] == '__OR_CLAUSE__':
+                continue
             if (in_pred[0], in_pred[1]) == elt:
                 value_range = in_pred[3]
+                if not value_range:
+                    continue
                 for v in value_range:
                     if not isinstance(v, tuple):
                         tot_values += 1
                     else:
-                        tot_values += v[-1] - v[0]
+                        try:
+                            tot_values += v[-1] - v[0]
+                        except Exception:
+                            tot_values += 1
         if not tot_values:
             if datatype == 'date':
                 tot_values = (self.filter_attrib_dict[elt][1] - self.filter_attrib_dict[elt][0]).days + 1
@@ -165,17 +184,45 @@ class Limit(GenerationPipeLineBase):
         return tot_values
 
     def insert_text_attrib(self, attrib_inner, insert_values, k, tabname_inner):
+        key = (tabname_inner, attrib_inner)
+        if self.has_structured_cnf():
+            try:
+                domain = self.get_cnf_attr_domain(key, route=self.cnf_route)
+                if domain is not None:
+                    kind = getattr(domain, 'kind', None)
+                    if kind == 'pinned':
+                        vals = getattr(domain, 'values', []) or []
+                        if vals:
+                            insert_values.append(vals[0])
+                            return
+                    elif kind == 'union':
+                        vals = self.get_cnf_distinct_values(key, count=max(2, k + 1), route=self.cnf_route)
+                        if vals:
+                            insert_values.append(vals[min(k, len(vals) - 1)])
+                            return
+            except Exception:
+                pass
         char_val = get_char(get_val_plus_delta('char', get_dummy_val_for('char'), k))  # why need unique values?
-        if (tabname_inner, attrib_inner) in self.filter_attrib_dict.keys():
+        if key in self.filter_attrib_dict.keys():
             s_val_text = self.get_s_val_for_textType(attrib_inner, tabname_inner)
             temp = copy.deepcopy(s_val_text)
             if '_' in s_val_text:
                 insert_values.append(temp.replace('_', char_val))
             else:
                 insert_values.append(temp.replace('%', char_val, 1))
-            insert_values[-1].replace('%', '')
+            insert_values[-1] = insert_values[-1].replace('%', '')
         else:
             insert_values.append(char_val)
+
+    def _store_joined_limit_val(self, attrib_inner, s_val_plus_k):
+        for edge in self.global_join_graph:
+            if attrib_inner in edge:
+                edge_key = frozenlist.FrozenList(edge)
+                edge_key.freeze()
+                if edge_key in self.joined_attrib_valDict.keys():
+                    self.joined_attrib_valDict[edge_key].append(s_val_plus_k)
+                else:
+                    self.joined_attrib_valDict[edge_key] = [s_val_plus_k]
 
     def insert_non_text_attrib(self, datatype, attrib_inner, insert_values, k, tabname_inner):
         for edge in self.global_join_graph:
@@ -188,24 +235,41 @@ class Limit(GenerationPipeLineBase):
                     insert_values.append(ast.literal_eval(get_format(datatype, s_val_plus_k)))
                     return
 
+        orig_datatype = datatype
         if datatype != 'date':
             datatype = 'int'
+        key = (tabname_inner, attrib_inner)
+        if self.has_structured_cnf():
+            try:
+                domain = self.get_cnf_attr_domain(key, route=self.cnf_route)
+                if domain is not None:
+                    kind = getattr(domain, 'kind', None)
+                    if kind == 'pinned':
+                        vals = getattr(domain, 'values', []) or []
+                        if vals:
+                            s_val_plus_k = vals[0]
+                            insert_values.append(ast.literal_eval(get_format(orig_datatype, s_val_plus_k)))
+                            self._store_joined_limit_val(attrib_inner, s_val_plus_k)
+                            return
+                    elif kind == 'union':
+                        vals = self.get_cnf_distinct_values(key, count=max(2, k + 1), route=self.cnf_route)
+                        if vals:
+                            s_val_plus_k = vals[min(k, len(vals) - 1)]
+                            insert_values.append(ast.literal_eval(get_format(orig_datatype, s_val_plus_k)))
+                            self._store_joined_limit_val(attrib_inner, s_val_plus_k)
+                            return
+            except Exception:
+                pass
+
         # check for filter (#MORE PRECISION CAN BE ADDED FOR NUMERIC#)
         s_val = self.get_s_val(attrib_inner, tabname_inner)
         s_val_plus_k = get_val_plus_delta(datatype, s_val, k)
-        if (tabname_inner, attrib_inner) in self.filter_attrib_dict.keys():
-            one = self.filter_attrib_dict[(tabname_inner, attrib_inner)][1]
+        if key in self.filter_attrib_dict.keys():
+            one = self.filter_attrib_dict[key][1]
             one = get_boundary_value(one, is_ub=True)
             s_val_plus_k = min(s_val_plus_k, one)
-        insert_values.append(ast.literal_eval(get_format(datatype, s_val_plus_k)))
-        for edge in self.global_join_graph:
-            if attrib_inner in edge:
-                edge_key = frozenlist.FrozenList(edge)
-                edge_key.freeze()
-                if edge_key in self.joined_attrib_valDict.keys():
-                    self.joined_attrib_valDict[edge_key].append(s_val_plus_k)
-                else:
-                    self.joined_attrib_valDict[edge_key] = [s_val_plus_k]
+        insert_values.append(ast.literal_eval(get_format(orig_datatype, s_val_plus_k)))
+        self._store_joined_limit_val(attrib_inner, s_val_plus_k)
 
     def __get_pre_assignment(self):
         pre_assignment = True

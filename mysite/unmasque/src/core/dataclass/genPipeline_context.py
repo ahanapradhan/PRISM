@@ -162,6 +162,7 @@ class GenPipelineContext:
         if self.__or_predicates is None:
             self.__or_predicates = []
         self.filter_in_predicates = []
+        self.cross_column_or_predicates = []
         # B13 (guarded): preselect a default route/pinning map for downstream use.
         if self.cnf is not None:
             try:
@@ -178,12 +179,64 @@ class GenPipelineContext:
         self.global_attrib_types = filter_extractor.global_attrib_types
         self.global_aoa_le_predicates = aoa_extractor.aoa_predicates
         self.global_aoa_l_predicates = aoa_extractor.aoa_less_thans
+        self.cross_column_or_predicates = []
+        self._cross_column_or_constituent_keys = set()
+        self._cross_column_or_constituent_preds = set()
 
         # methods passed by aoa extractor
         self.get_dmin_val = filter_extractor.get_dmin_val
         self.get_datatype = filter_extractor.get_datatype
         self.do_permanent_mutation = aoa_extractor.do_permanent_mutation
         self.restore_dmin_from_dict = aoa_extractor.restore_d_min_from_dict
+
+    # ---- CNF/route-aware helpers (guarded, legacy no-op when CNF absent) ----
+    def has_structured_cnf(self) -> bool:
+        try:
+            from ..disjunction.routes import has_cnf_routes
+            return has_cnf_routes(self.cnf)
+        except Exception:
+            return False
+
+    def set_probe_route(self, route):
+        self.cnf_route = route
+        if route is None or not self.has_structured_cnf():
+            self.cnf_pin_values = {}
+            return self.cnf_pin_values
+        try:
+            from ..disjunction.routes import route_pin_values
+            self.cnf_pin_values = route_pin_values(route) or {}
+        except Exception:
+            self.cnf_pin_values = {}
+        return self.cnf_pin_values
+
+    def get_freeing_route_for_attr(self, attr):
+        if not self.has_structured_cnf():
+            return None
+        try:
+            from ..disjunction.filter_structure import select_freeing_route_for_attr
+            return select_freeing_route_for_attr(self.cnf, attr)
+        except Exception:
+            return None
+
+    def get_attr_domain_under_route(self, attr, route=None):
+        if not self.has_structured_cnf():
+            return None
+        try:
+            from ..disjunction.filter_structure import Domain, attr_domain_under_route
+            route = self.cnf_route if route is None else route
+            return attr_domain_under_route(self.cnf, route, attr, global_domain=Domain(kind='free'))
+        except Exception:
+            return None
+
+    def get_distinct_values_for_attr(self, attr, count=2, route=None, fallback=None):
+        if not self.has_structured_cnf():
+            return list((fallback or [])[:count])
+        try:
+            from ..disjunction.filter_structure import sample_values_from_domain
+            domain = self.get_attr_domain_under_route(attr, route=route)
+            return sample_values_from_domain(domain, count=count, fallback=fallback)
+        except Exception:
+            return list((fallback or [])[:count])
 
     def doJob(self):
         self.restore_dmin_from_dict()
@@ -244,6 +297,10 @@ class GenPipelineContext:
                 if entry[2].lower() in ['like', 'equal']:
                     filter_attrib_dict[(entry[0], entry[1])] = entry[3]
         for entry in self.filter_in_predicates:
+            if not entry or len(entry) < 4:
+                continue
+            if str(entry[2]).upper() in ('OR_CLAUSE', 'OR') and entry[0] == '__OR_CLAUSE__':
+                continue
             filter_attrib_dict[(entry[0], entry[1])] = entry[3]
 
     def __add_for_joined_attribs(self, entry, filter_attrib_dict):
@@ -277,13 +334,32 @@ class GenPipelineContext:
             filter_dict.append(key)
 
         to_add = set()
-        for key in self.filter_attrib_dict.keys():
+        cross_keys = getattr(self, '_cross_column_or_constituent_keys', set()) or set()
+        for key in list(self.filter_attrib_dict.keys()):
+            if not isinstance(key, tuple) or len(key) != 2:
+                continue
             if key in filter_dict:
                 continue
-            if len(self.filter_attrib_dict[key]) > 2 or any(isinstance(v, tuple) for v in self.filter_attrib_dict[key]):
+            # Do not synthesize standalone conjuncts for attributes participating in
+            # discovered cross-column OR clauses (disjunctive, not standalone).
+            if key in cross_keys:
                 continue
-            bounds = self.filter_attrib_dict[key]
-            datatype = self.get_datatype((key[0], key[1]))
+            val = self.filter_attrib_dict[key]
+            try:
+                if val is None:
+                    continue
+                # skip complex/IN-like or clause payloads not representable as simple bounds
+                if isinstance(val, (list, FrozenList)):
+                    continue
+                if isinstance(val, tuple) and (len(val) > 2 or any(isinstance(v, tuple) for v in val)):
+                    continue
+            except Exception:
+                continue
+            bounds = val
+            try:
+                datatype = self.get_datatype((key[0], key[1]))
+            except Exception:
+                continue
             i_min, i_max = get_min_and_max_val(datatype)
             if not isinstance(bounds, tuple):  # single value
                 op = '='
@@ -316,6 +392,9 @@ class GenPipelineContext:
         return LB_dict, UB_dict
 
     def __generate_arithmetic_conjunctive_disjunctions(self):
+        self.cross_column_or_predicates = getattr(self, 'cross_column_or_predicates', [])
+        self._cross_column_or_constituent_keys = getattr(self, '_cross_column_or_constituent_keys', set())
+        self._cross_column_or_constituent_preds = getattr(self, '_cross_column_or_constituent_preds', set())
         for p in self.__or_predicates:
             non_empty_indices = [i for i, t_a in enumerate(p) if t_a]
             if len(non_empty_indices) == 1:
@@ -343,7 +422,33 @@ class GenPipelineContext:
                         values.append((i_min, i_max))
                 self.__adjust_for_in_predicates(attrib, tab, values)
             else:
-                raise UnmasqueError(ERROR_007, "genPipeline_context", "Disjunction on Multiple Attributes are out of scope!")
+                # Cross-column/attribute OR clause (e.g. t.a = 1 OR t.b > 5).
+                # Keep as a structured clause for CNF-native/WHERE rendering instead
+                # of lossy single-attribute IN flattening.
+                clause_preds = [p[i] for i in non_empty_indices if p[i]]
+                if not clause_preds:
+                    continue
+                if len(clause_preds) == 1:
+                    if clause_preds[0] not in self.arithmetic_filters:
+                        self.arithmetic_filters.append(clause_preds[0])
+                    continue
+                or_pred = ('__OR_CLAUSE__', '__OR_CLAUSE__', 'OR_CLAUSE', tuple(clause_preds), tuple(clause_preds))
+                if or_pred not in self.filter_in_predicates and or_pred not in self.cross_column_or_predicates:
+                    self.cross_column_or_predicates.append(or_pred)
+                    self.filter_in_predicates.append(or_pred)
+                # Remove constituent predicates if they were present as standalone conjuncts;
+                # the OR clause subsumes their independent conjunction.
+                for cp in clause_preds:
+                    try:
+                        self._cross_column_or_constituent_preds.add(tuple(cp) if not isinstance(cp, tuple) else cp)
+                        self._cross_column_or_constituent_keys.add((cp[0], cp[1]))
+                    except Exception:
+                        pass
+                    try:
+                        while cp in self.arithmetic_filters:
+                            self.arithmetic_filters.remove(cp)
+                    except Exception:
+                        pass
 
     def __adjust_for_in_predicates(self, attrib, tab, _values):
         values = []

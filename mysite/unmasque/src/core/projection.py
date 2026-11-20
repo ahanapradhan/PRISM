@@ -77,7 +77,14 @@ class Projection(GenerationPipeLineBase):
     def do_init(self) -> None:
         super().do_init()
         for in_pred in self.filter_in_predicates:
-            self.or_predicates_dict[(in_pred[0], in_pred[1])] = in_pred[3]
+            if not in_pred or len(in_pred) < 4:
+                continue
+            if str(in_pred[2]).upper() in ('OR_CLAUSE', 'OR') and in_pred[0] == '__OR_CLAUSE__':
+                continue
+            try:
+                self.or_predicates_dict[(in_pred[0], in_pred[1])] = in_pred[3]
+            except Exception:
+                continue
 
     def doExtractJob(self, query):
         s_values = []
@@ -135,14 +142,28 @@ class Projection(GenerationPipeLineBase):
                 val = self.check_impact_of_single_attrib(attrib, new_result, projection_dep, query, tabname)
             s_values.append((tabname, attrib, val))
 
+        in_pred_attribs = {
+            p[1] for p in self.filter_in_predicates
+            if p and len(p) > 1 and not (str(p[2]).upper() in ('OR_CLAUSE', 'OR') and p[0] == '__OR_CLAUSE__')
+        }
         for i in range(len(projection_names)):
             if len(projection_dep[i]) == 1:
                 attrib_tup = projection_dep[i][0]
                 projected_attrib.append(attrib_tup[1])
             else:
-                if len(projection_dep[i]) == 0 and new_result[0][i] != CONST_1_VALUE:
+                if (len(projection_dep[i]) == 0
+                        and projection_names[i] in in_pred_attribs
+                        and new_result[0][i] != CONST_1_VALUE):
+                    # IN/OR-constrained projected columns may look constant in D_min;
+                    # keep the attribute reference instead of a literal constant.
+                    projected_attrib.append(projection_names[i])
+                elif len(projection_dep[i]) == 0 and new_result[0][i] != CONST_1_VALUE:
                     # If no dependency is there and value is not 1 in result this means it is constant.
-                    projected_attrib.append(get_format(projection_coulumn_type[i], new_result[0][i]))
+                    # With CNF/OR union domains (possibly cross-column), keep attr ref if non-singleton.
+                    if self.has_structured_cnf() and self._is_cnf_non_singleton_projection(projection_names[i]):
+                        projected_attrib.append(projection_names[i])
+                    else:
+                        projected_attrib.append(get_format(projection_coulumn_type[i], new_result[0][i]))
                 else:
                     # No dependency and value is one so in groupby file will differentiate between count or 1.
                     projected_attrib.append('')
@@ -186,6 +207,32 @@ class Projection(GenerationPipeLineBase):
         for fe in self.global_filter_predicates:
             if fe[1] == attrib and (fe[2] == 'equal' or fe[2] == '=') and fe[1] not in self.joined_attribs:
                 return
+        key = (tabname, attrib)
+        if self.has_structured_cnf():
+            return self._check_impact_cnf(attrib, new_result, projection_dep, query, tabname, key)
+
+        if key in self.or_predicates_dict:
+            in_vals = list(self.or_predicates_dict[key])
+            prev = self.connectionHelper.execute_sql_fetchone_0(
+                self.connectionHelper.queries.select_attribs_from_relation([attrib],
+                                                                            self.get_fully_qualified_table_name(tabname)))
+            alt = None
+            for v in in_vals:
+                if str(v) != str(prev):
+                    alt = v
+                    break
+            if alt is None:
+                self.logger.debug("Could not find alternative IN value! Cannot verify impact!")
+                return
+            self.logger.debug(f"update {tabname}.{attrib} with IN alternative {alt} that had previous value {prev}")
+            self.update_with_val(attrib, tabname, alt)
+            new_result1 = self.app.doJob(query)
+            self.update_with_val(attrib, tabname, prev)
+            if not self.app.isQ_result_empty(new_result1):
+                projection_dep = get_index_of_difference(attrib, new_result, new_result1, projection_dep, tabname)
+            else:
+                self.logger.debug("Got empty result!!!!")
+            return alt
         val, prev = self.update_attrib_to_see_impact(attrib, tabname)
         if val == prev:
             self.logger.debug("Could not find other s-value! Cannot verify impact!")
@@ -197,6 +244,55 @@ class Projection(GenerationPipeLineBase):
         else:
             self.logger.debug("Got empty result!!!!")
         return val
+
+    def _check_impact_cnf(self, attrib, new_result, projection_dep, query, tabname, key):
+        route = self.get_cnf_freeing_route_for_attr(key) or self.cnf_route
+        saved, prev_route, prev_pins = self.apply_cnf_route_to_db(route)
+        try:
+            fqtn = self.get_fully_qualified_table_name(tabname)
+            prev = self.connectionHelper.execute_sql_fetchone_0(
+                self.connectionHelper.queries.select_attribs_from_relation([attrib], fqtn))
+            domain = self.get_cnf_attr_domain(key, route=self.cnf_route)
+            if domain is not None and getattr(domain, 'kind', None) == 'pinned':
+                self.logger.debug(f"CNF-pinned singleton for {tabname}.{attrib}; cannot verify impact.")
+                return None
+            fallback = []
+            try:
+                fallback.append(self.get_dmin_val(attrib, tabname))
+            except Exception:
+                pass
+            if prev is not None:
+                fallback.insert(0, prev)
+            candidates = self.get_cnf_distinct_values(key, count=4, route=self.cnf_route, fallback=fallback)
+            # legacy IN values can still help when domain sampling is coarse
+            if key in self.or_predicates_dict:
+                for v in list(self.or_predicates_dict[key]):
+                    if v not in candidates:
+                        candidates.append(v)
+            alt = None
+            for v in candidates:
+                if prev is None or str(v) != str(prev):
+                    alt = v
+                    break
+            if alt is None:
+                try:
+                    alt = self.get_different_s_val(attrib, tabname, prev)
+                except Exception:
+                    alt = None
+            if alt is None or (prev is not None and str(alt) == str(prev)):
+                self.logger.debug(f"Could not find alternative CNF/route value for {tabname}.{attrib}")
+                return None
+            self.logger.debug(f"[CNF] update {tabname}.{attrib} with value {alt} (prev {prev})")
+            self.update_with_val(attrib, tabname, alt)
+            new_result1 = self.app.doJob(query)
+            self.update_with_val(attrib, tabname, prev)
+            if not self.app.isQ_result_empty(new_result1):
+                projection_dep = get_index_of_difference(attrib, new_result, new_result1, projection_dep, tabname)
+            else:
+                self.logger.debug("Got empty result under CNF route probe")
+            return alt
+        finally:
+            self.restore_cnf_probe_state(saved, prev_route, prev_pins)
 
     def find_solution_on_multi(self, projected_attrib, projection_dep, query):
         sols = []
@@ -214,7 +310,10 @@ class Projection(GenerationPipeLineBase):
                 else:
                     value_used = self.construct_value_used_with_dmin()
                     self.logger.debug("Inside else", value_used)
-                    solution.append(self.get_solution(projected_attrib, projection_dep, idx_pro, value_used, query))
+                    if self.has_structured_cnf():
+                        solution.append(self._get_solution_cnf(projected_attrib, projection_dep, idx_pro, value_used, query))
+                    else:
+                        solution.append(self.get_solution(projected_attrib, projection_dep, idx_pro, value_used, query))
                     self.logger.debug("viola1",solution)
             sols.append(solution)
 
@@ -376,16 +475,18 @@ class Projection(GenerationPipeLineBase):
         pin = getattr(self, 'cnf_pin_values', None) or {}
         if key in pin and pin[key] is not None:
             s_val = pin[key]
-        elif key in self.or_predicates_dict.keys():
+        elif self.has_structured_cnf():
+            s_val = self._pick_cnf_coeff_value(coeff, j, key, outer_idx)
+        if s_val is None and key in self.or_predicates_dict.keys():
             s_val = self.__assign_next_s_value_for_or_attrib([self.get_dmin_val(key[1], key[0])], key)
-        elif key in self.filter_attrib_dict.keys():
+        if s_val is None and key in self.filter_attrib_dict.keys():
             datatype = self.get_datatype(key)
             maxi, mini = self.__get_min_max_s_values(key, maxi, mini)
             if datatype == 'int':
                 s_val = random.randrange(mini, maxi)
             elif datatype == 'numeric':
                 s_val = round(random.uniform(mini, maxi), un_precision + 1)
-        else:
+        if s_val is None:
             self.logger.debug(f"mini: {mini}, maxi: {maxi}")
             s_val = random.randrange(math.floor(mini), math.ceil(maxi))
         self.logger.debug(f"s-value for {key} is {s_val}, assigned to coeff[{outer_idx}][{j}]")
@@ -453,6 +554,114 @@ class Projection(GenerationPipeLineBase):
     def construct_value_used_with_dmin(self):
         used_val = [val for data in self.global_min_instance_dict.values() for pair in zip(*data) for val in pair]
         return used_val
+
+    def _resolve_attr_from_projection_name(self, proj_name):
+        if not isinstance(proj_name, str):
+            return None
+        try:
+            for (tab, col) in getattr(self, 'global_attrib_types', []) or []:
+                if col == proj_name or f"{tab}.{col}" == proj_name:
+                    return (tab, col)
+        except Exception:
+            pass
+        try:
+            tab = self.find_tabname_for_given_attrib(proj_name)
+            if tab is not None:
+                return (tab, proj_name)
+        except Exception:
+            pass
+        return None
+
+    def _is_cnf_non_singleton_projection(self, proj_name):
+        attr = self._resolve_attr_from_projection_name(proj_name)
+        if attr is None or not self.has_structured_cnf():
+            return False
+        try:
+            route = self.get_cnf_freeing_route_for_attr(attr)
+            if route is not None:
+                dom = self.get_cnf_attr_domain(attr, route=route)
+                if dom is None or getattr(dom, 'kind', None) != 'pinned':
+                    return True
+            dom = self.get_cnf_attr_domain(attr, route=self.cnf_route)
+            if dom is not None and getattr(dom, 'kind', None) in ('free', 'union'):
+                return True
+            from .disjunction.filter_structure import attr_global_union_domain
+            g = attr_global_union_domain(self.cnf, attr)
+            if g is not None and getattr(g, 'kind', None) != 'pinned':
+                return True
+        except Exception:
+            return False
+        return False
+
+    def _select_route_for_deps(self, deps):
+        if not self.has_structured_cnf():
+            return self.cnf_route
+        attrs = [(d[0], d[1]) for d in deps]
+        try:
+            from .disjunction.routes import iter_routes
+            from .disjunction.filter_structure import is_attr_free_under_route
+            best = None
+            best_score = -1
+            for i, route in enumerate(iter_routes(self.cnf)):
+                if i >= 64:
+                    break
+                score = sum(1 for a in attrs if is_attr_free_under_route(self.cnf, route, a))
+                if score > best_score:
+                    best = route
+                    best_score = score
+                    if score == len(attrs):
+                        break
+            return best or self.cnf_route
+        except Exception:
+            if attrs:
+                return self.get_cnf_freeing_route_for_attr(attrs[0]) or self.cnf_route
+            return self.cnf_route
+
+    def _get_solution_cnf(self, projected_attrib, projection_dep, idx, value_used, query):
+        deps = projection_dep[idx] or []
+        route = self._select_route_for_deps(deps)
+        saved, prev_route, prev_pins = self.apply_cnf_route_to_db(route)
+        try:
+            return self.get_solution(projected_attrib, projection_dep, idx, value_used, query)
+        finally:
+            self.restore_cnf_probe_state(saved, prev_route, prev_pins)
+
+    def _pick_cnf_coeff_value(self, coeff, j, key, outer_idx):
+        try:
+            domain = self.get_cnf_attr_domain(key, route=self.cnf_route)
+        except Exception:
+            domain = None
+        if domain is None:
+            return None
+        kind = getattr(domain, 'kind', None)
+        if kind == 'free':
+            return None
+        if kind == 'pinned':
+            vals = getattr(domain, 'values', []) or []
+            return vals[0] if vals else None
+        used = []
+        for i in range(outer_idx):
+            try:
+                used.append(coeff[i][j])
+            except Exception:
+                pass
+        fallback = []
+        try:
+            fallback.append(self.get_dmin_val(key[1], key[0]))
+        except Exception:
+            pass
+        try:
+            candidates = self.get_cnf_distinct_values(key, count=max(4, outer_idx + 2), route=self.cnf_route, fallback=fallback)
+        except Exception:
+            candidates = list(fallback)
+        if key in self.or_predicates_dict:
+            for v in list(self.or_predicates_dict[key]):
+                if v not in candidates:
+                    candidates.append(v)
+        for v in candidates:
+            if not any(str(v) == str(u) for u in used):
+                return v
+        return candidates[0] if candidates else None
 
 
 def get_param_values_external(coeff_arr):

@@ -1,4 +1,5 @@
 import ast
+import copy
 
 from frozenlist._frozenlist import FrozenList
 
@@ -39,57 +40,68 @@ class GroupBy(GenerationPipeLineBase):
                 curr_attrib_value = [0, 1, 1]
 
                 key_list = next((elt for elt in self.global_join_graph if attrib in elt), [])
+                prev_route = self.cnf_route
+                prev_pins = copy.deepcopy(getattr(self, 'cnf_pin_values', {}) or {})
+                if self.has_structured_cnf():
+                    route = self.get_cnf_freeing_route_for_attr((tabname, attrib)) or self.cnf_route
+                    self.set_cnf_probe_route(route)
 
-                # For this table (tabname) and this attribute (attrib), fill all tables now
-                for tabname_inner in self.core_relations:
-                    attrib_list_inner = self.global_all_attribs[tabname_inner]
-                    insert_rows = []
-                    no_of_rows = 3 if tabname_inner == tabname else 1
-                    key_path_flag = any(val in key_list for val in attrib_list_inner)
-                    if tabname_inner != tabname and key_path_flag:
-                        no_of_rows = 2
+                try:
+                    # For this table (tabname) and this attribute (attrib), fill all tables now
+                    for tabname_inner in self.core_relations:
+                        attrib_list_inner = self.global_all_attribs[tabname_inner]
+                        insert_rows = []
+                        no_of_rows = 3 if tabname_inner == tabname else 1
+                        key_path_flag = any(val in key_list for val in attrib_list_inner)
+                        if tabname_inner != tabname and key_path_flag:
+                            no_of_rows = 2
 
-                    attrib_list_str = ",".join(attrib_list_inner)
-                    att_order = f"({attrib_list_str})"
-                    self.logger.debug(f"for {tabname_inner} insert {no_of_rows} rows")
-                    for k in range(no_of_rows):
-                        insert_values = []
-                        for attrib_inner in attrib_list_inner:
-                            datatype = self.get_datatype((tabname_inner, attrib_inner))
+                        attrib_list_str = ",".join(attrib_list_inner)
+                        att_order = f"({attrib_list_str})"
+                        self.logger.debug(f"for {tabname_inner} insert {no_of_rows} rows")
+                        for k in range(no_of_rows):
+                            insert_values = []
+                            for attrib_inner in attrib_list_inner:
+                                datatype = self.get_datatype((tabname_inner, attrib_inner))
 
-                            if has_attrib_key_condition(attrib, attrib_inner, key_list):
-                                self.insert_values_for_joined_attribs(attrib_inner, curr_attrib_value, datatype,
-                                                                      insert_values, k, tabname_inner)
-                            else:
-                                self.insert_values_for_single_attrib(attrib_inner, datatype, insert_values,
-                                                                     tabname_inner)
-                        insert_rows.append(tuple(insert_values))
+                                if has_attrib_key_condition(attrib, attrib_inner, key_list):
+                                    self.insert_values_for_joined_attribs(attrib_inner, curr_attrib_value, datatype,
+                                                                          insert_values, k, tabname_inner)
+                                else:
+                                    self.insert_values_for_single_attrib(attrib_inner, datatype, insert_values,
+                                                                         tabname_inner)
+                            insert_rows.append(tuple(insert_values))
 
-                    self.insert_attrib_vals_into_table(att_order, attrib_list_inner, insert_rows, tabname_inner)
+                        self.insert_attrib_vals_into_table(att_order, attrib_list_inner, insert_rows, tabname_inner)
 
-                self.see_d_min()
-                new_result = self.app.doJob(query)
+                    self.see_d_min()
+                    new_result = self.app.doJob(query)
 
-                # Checking for 1 as constant in select clause or count is present.
-                for i in range(len(self.projected_attribs)):
-                    if self.projected_attribs[i] == '':
-                        for j in range(1, len(new_result)):  # skipping the header of result
-                            if new_result[j][i] != CONST_1_VALUE:
-                                check_array[i] = COUNT_THERE
-                            elif new_result[j][i] == CONST_1_VALUE and check_array[i] != COUNT_THERE:
-                                check_array[i] = CONST_1_THERE
+                    # Checking for 1 as constant in select clause or count is present.
+                    for i in range(len(self.projected_attribs)):
+                        if self.projected_attribs[i] == '':
+                            for j in range(1, len(new_result)):  # skipping the header of result
+                                if new_result[j][i] != CONST_1_VALUE:
+                                    check_array[i] = COUNT_THERE
+                                elif new_result[j][i] == CONST_1_VALUE and check_array[i] != COUNT_THERE:
+                                    check_array[i] = CONST_1_THERE
 
-                if self.app.isQ_result_empty(new_result):
-                    self.logger.error('some error in generating new database. '
-                                      'Result is empty. Can not identify Grouping')
-                    return False
-                nonEmpty_rows = self.app.get_all_nullfree_rows(new_result)
-                if len(nonEmpty_rows) == 2:
-                    self.group_by_attrib.append(attrib)
-                    self.has_groupby = True
-                elif len(nonEmpty_rows) == 1:
-                    # It indicates groupby on at least one attribute
-                    self.has_groupby = True
+                    if self.app.isQ_result_empty(new_result):
+                        self.logger.error('some error in generating new database. '
+                                          'Result is empty. Can not identify Grouping')
+                        return False
+                    nonEmpty_rows = self.app.get_all_nullfree_rows(new_result)
+                    if len(nonEmpty_rows) == 2:
+                        self.group_by_attrib.append(attrib)
+                        self.has_groupby = True
+                    elif len(nonEmpty_rows) == 1:
+                        # It indicates groupby on at least one attribute
+                        self.has_groupby = True
+                finally:
+                    if self.has_structured_cnf():
+                        self.cnf_route = prev_route
+                        self.cnf_pin_values = copy.deepcopy(prev_pins)
+                        self.set_cnf_probe_route(prev_route)
 
         self.remove_duplicates()
 
@@ -157,12 +169,54 @@ class GroupBy(GenerationPipeLineBase):
 
     def get_insert_value_for_joined_attribs(self, datatype, attrib_inner, delta, tabname_inner):
         self.logger.debug(tabname_inner, attrib_inner)
-        if (tabname_inner, attrib_inner) in self.filter_attrib_dict.keys():
+        key = (tabname_inner, attrib_inner)
+        if self.has_structured_cnf():
+            cnf_val = self._get_cnf_delta_value(key, datatype, delta)
+            if cnf_val is not None:
+                self.logger.debug(cnf_val)
+                return cnf_val
+        if key in self.filter_attrib_dict.keys():
             val = self.__get_s_plus_k_val(attrib_inner, datatype, delta, tabname_inner)
         else:
             val = get_val_plus_delta(datatype, get_dummy_val_for(datatype), delta)
         self.logger.debug(val)
         return val
+
+    def _get_cnf_delta_value(self, key, datatype, delta):
+        try:
+            domain = self.get_cnf_attr_domain(key, route=self.cnf_route)
+        except Exception:
+            domain = None
+        if domain is None:
+            return None
+        kind = getattr(domain, 'kind', None)
+        if kind in ('pinned',):
+            vals = getattr(domain, 'values', []) or []
+            if vals:
+                # if pinned, cannot vary; return pinned (delta ignored)
+                return vals[0]
+            intervals = getattr(domain, 'intervals', []) or []
+            if intervals:
+                return intervals[0][0]
+            return None
+        if kind == 'union':
+            vals = self.get_cnf_distinct_values(key, count=max(3, int(delta) + 2), route=self.cnf_route)
+            if vals:
+                idx = min(int(delta), len(vals) - 1)
+                return vals[idx]
+            intervals = getattr(domain, 'intervals', []) or []
+            if intervals:
+                lo, hi = intervals[0]
+                try:
+                    cand = get_val_plus_delta(datatype, lo, delta)
+                    if cand <= hi:
+                        return cand
+                    return hi
+                except Exception:
+                    return lo
+            return None
+        # free domain: let legacy/default logic decide
+        return None
 
     def __get_s_plus_k_val(self, attrib_inner, datatype, delta, tabname_inner):
         if isinstance(self.filter_attrib_dict[(tabname_inner, attrib_inner)], tuple):  # range

@@ -79,14 +79,22 @@ class QueryDetails:
         to_remove = []
         for ar_fil in self.arithmetic_filters:
             for fl_in in self.filter_in_predicates:
-                if get_tab(ar_fil) == get_tab(fl_in) and get_attrib(ar_fil) == get_attrib(fl_in):
-                    op = get_op(ar_fil)
-                    if op in ['=', 'equal'] and get_LB(ar_fil) in get_LB(fl_in):
-                        to_remove.append(ar_fil)
-                    elif op == 'range' and (get_LB(ar_fil), get_UB(ar_fil)) in get_LB(fl_in):
-                        to_remove.append(ar_fil)
+                try:
+                    if fl_in and str(fl_in[2]).upper() in ('OR_CLAUSE', 'OR') and fl_in[0] == '__OR_CLAUSE__':
+                        continue
+                    if get_tab(ar_fil) == get_tab(fl_in) and get_attrib(ar_fil) == get_attrib(fl_in):
+                        op = get_op(ar_fil)
+                        if op in ['=', 'equal'] and get_LB(ar_fil) in get_LB(fl_in):
+                            to_remove.append(ar_fil)
+                        elif op == 'range' and (get_LB(ar_fil), get_UB(ar_fil)) in get_LB(fl_in):
+                            to_remove.append(ar_fil)
+                except Exception:
+                    continue
         for t_r in to_remove:
-            self.arithmetic_filters.remove(t_r)
+            try:
+                self.arithmetic_filters.remove(t_r)
+            except Exception:
+                pass
 
 
 def get_formatted_value(datatype, value):
@@ -231,9 +239,31 @@ class QueryStringGenerator:
                                                              min(neg_val[0][0], neg_val[1][0]),
                                                              max(neg_val[1][1], neg_val[0][1])))
         else:
-            for pred in remnants.filter_in_predicates:
+            # Sync arithmetic filters from context when available so cleaned-up
+            # disjunction handling (e.g. cross-column OR clauses) is reflected.
+            if hasattr(remnants, 'arithmetic_filters'):
+                try:
+                    self._workingCopy.arithmetic_filters = copy.deepcopy(list(remnants.arithmetic_filters))
+                except Exception:
+                    pass
+            for pred in getattr(remnants, 'filter_in_predicates', []) or []:
                 if pred not in self._workingCopy.filter_in_predicates:
                     self._workingCopy.filter_in_predicates.append(pred)
+            # Remove standalone predicates that are constituents of cross-column OR clauses.
+            or_constituents = set()
+            for pred in self._workingCopy.filter_in_predicates:
+                try:
+                    if pred and str(pred[2]).upper() in ('OR_CLAUSE', 'OR') and pred[0] == '__OR_CLAUSE__':
+                        for cp in (pred[3] or []):
+                            if cp:
+                                or_constituents.add(tuple(cp) if not isinstance(cp, tuple) else cp)
+                except Exception:
+                    continue
+            if or_constituents:
+                self._workingCopy.arithmetic_filters = [
+                    af for af in self._workingCopy.arithmetic_filters
+                    if (tuple(af) if not isinstance(af, tuple) else af) not in or_constituents
+                ]
             # B13 (guarded): carry CNF for route-aware rendering/diagnostics when present.
             if getattr(remnants, 'cnf', None) is not None:
                 self._workingCopy.cnf = remnants.cnf
@@ -440,6 +470,23 @@ class QueryStringGenerator:
             predicate = self.__generate_predicate_string_for_in_operator(tab, attrib, lb)
             predicate = f"({predicate})" if "OR" in predicate else predicate
             return predicate
+        if op in ('or_clause', 'or'):
+            parts = []
+            for sub in (lb or []):
+                if not sub:
+                    continue
+                try:
+                    sp = self.formulate_predicate_from_filter(sub)
+                except Exception:
+                    sp = ''
+                if sp:
+                    parts.append(sp)
+            if not parts:
+                return ''
+            if len(parts) == 1:
+                return parts[0]
+            return '(' + ' OR '.join(parts) + ')'
+
         datatype = self.get_datatype((tab, attrib))
         f_lb = get_formatted_value(datatype, lb)
         f_ub = get_formatted_value(datatype, ub)
