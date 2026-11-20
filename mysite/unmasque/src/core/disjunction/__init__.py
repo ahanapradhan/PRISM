@@ -5,6 +5,7 @@ scoped snapshot/restore/prep utilities. Not wired into legacy pipelines by
 default.
 """
 
+from .cnf_extractor import CNFDisjunctionExtractor, ClauseStatus, ExtractionResult
 from .extraction import (
     NecessityResult,
     PatternKillScaffold,
@@ -24,6 +25,9 @@ __all__ = [
     "Atom",
     "Clause",
     "CNF",
+    "CNFDisjunctionExtractor",
+    "ClauseStatus",
+    "ExtractionResult",
     "NecessityResult",
     "PatternKillScaffold",
     "TryNullResult",
