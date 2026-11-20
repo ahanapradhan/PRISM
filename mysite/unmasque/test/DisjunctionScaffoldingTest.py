@@ -5,6 +5,7 @@ from mysite.unmasque.src.core.disjunction import (
     Atom,
     Clause,
     CNF,
+    CNFDisjunctionExtractor,
     DbRestorePoint,
     PatternKillScaffold,
     StateSnapshot,
@@ -249,6 +250,65 @@ class DisjunctionScaffoldingStep3Test(unittest.TestCase):
         pats = pk.patterns(["a", "b"], choices=("o", "m"))
         self.assertEqual(len(pats), 4)
         self.assertEqual(pats[0], {"a": "o", "b": "o"})
+
+
+class DisjunctionScaffoldingStep4Test(unittest.TestCase):
+    def test_clause_loop_extension_and_legacy_emission(self):
+        sat_state = {"c0": 0}
+
+        def extract_atoms(dm, excluded_attrs, own_atoms):
+            if excluded_attrs == [] and own_atoms == [] and dm == "dm0":
+                return [Atom("t", "x", intervals=[(1, 1)]), Atom("t", "y", intervals=[(5, 5)])], {"r": 0}
+            if dm == "dm_c0_1":
+                return [Atom("t", "x", intervals=[(2, 2)])], {"r": 1}
+            return [], {}
+
+        def exists_satisfier(i, known, cnf, itst):
+            if i == 0:
+                sat_state["c0"] += 1
+                return sat_state["c0"] == 1
+            return False
+
+        def minimize(i, known, cnf, itst):
+            return "dm_c0_1" if i == 0 else "dm_other"
+
+        ex = CNFDisjunctionExtractor(extract_atoms, exists_satisfier, minimize)
+        res = ex.extract("dm0")
+        self.assertEqual(len(res.cnf.clauses), 2)
+        self.assertEqual(len(res.cnf.clauses[0].atoms), 2)
+        self.assertEqual([a.intervals for a in res.cnf.clauses[0].atoms], [[(1, 1)], [(2, 2)]])
+        self.assertTrue(all(s.status == "OK" for s in res.statuses))
+        self.assertEqual(len(res.legacy_or_predicates), 2)
+        self.assertEqual(res.legacy_or_predicates[0][0][0:3], ("t", "x", "equal"))
+        self.assertEqual(res.legacy_or_predicates[0][1][3], 2)
+
+    def test_unsupported_shape_and_incomplete_statuses(self):
+        def extract_atoms_multi(dm, excluded_attrs, own_atoms):
+            if excluded_attrs == [] and own_atoms == []:
+                return [Atom("t", "x", intervals=[(1, 1)])], {}
+            return [Atom("t", "x", intervals=[(2, 2)]), Atom("t", "z", intervals=[(3, 3)])], {}
+
+        ex = CNFDisjunctionExtractor(
+            extract_atoms_multi,
+            lambda i, known, cnf, it: i == 0 and len(known) == 1,
+            lambda i, k, c, it: "dm",
+        )
+        res = ex.extract("dm0")
+        self.assertEqual(res.statuses[0].status, "UNSUPPORTED_SHAPE")
+
+        def extract_atoms_zero(dm, excluded_attrs, own_atoms):
+            if excluded_attrs == [] and own_atoms == []:
+                return [Atom("t", "x", intervals=[(1, 1)])], {}
+            return [], {}
+
+        ex2 = CNFDisjunctionExtractor(
+            extract_atoms_zero,
+            lambda i, known, cnf, it: i == 0 and len(known) == 1,
+            lambda i, k, c, it: "dm",
+            max_retries_zero_atoms=2,
+        )
+        res2 = ex2.extract("dm0")
+        self.assertEqual(res2.statuses[0].status, "INCOMPLETE")
 
 
 if __name__ == "__main__":
