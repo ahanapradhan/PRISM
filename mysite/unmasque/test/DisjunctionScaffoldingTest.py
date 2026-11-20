@@ -11,22 +11,32 @@ from mysite.unmasque.src.core.disjunction import (
     DbRestorePoint,
     PatternKillScaffold,
     StateSnapshot,
+    atom_for_attr,
     atom_from_legacy_pred,
     atoms_from_or_slot,
+    cnf_attrs,
     cnf_to_legacy_or_predicates,
     deep_snapshot,
     drop_not_null_sql,
     gap,
+    has_cnf_routes,
+    is_attr_free,
     is_necessary,
     is_not_true,
     is_true,
+    iter_routes,
     keep_predicate_sql,
     legacy_or_predicates_to_cnf,
+    pinned_attrs,
     probes,
+    representative_value,
     remove_predicate_sql,
     restore_snapshot,
+    route_pin_values,
+    route_row_snapshots,
     sat_result,
     search_atom_numeric,
+    select_route,
     try_null_scaffold,
 )
 from mysite.unmasque.src.core.dataclass.genPipeline_context import GenPipelineContext
@@ -382,6 +392,74 @@ class DisjunctionScaffoldingStep5Test(unittest.TestCase):
         self.assertTrue(check)
         self.assertEqual(p.or_predicates, [(initial,)])
         self.assertIsNone(p.disjunction_cnf)
+
+
+class DisjunctionScaffoldingStep6Test(unittest.TestCase):
+    def test_route_helpers_selection_pinning_and_snapshots(self):
+        a1 = Atom("t", "x", intervals=[(1, 1)], id="a1")
+        a2 = Atom("t", "x", intervals=[(2, 2)], id="a2")
+        b1 = Atom("t", "y", kind="text", text=("eq", "hi"), id="b1")
+        cnf = CNF(clauses=[Clause(atoms=[a1, a2]), Clause(atoms=[b1])], row_of={"a1": {"v": 1}, "b1": {"v": "hi"}})
+
+        self.assertTrue(has_cnf_routes(cnf))
+        r0 = select_route(cnf, 0)
+        self.assertEqual(len(r0), 2)
+        self.assertEqual(r0[0].id, "a1")
+        self.assertEqual(r0[1].id, "b1")
+        routes = list(iter_routes(cnf))
+        self.assertEqual(len(routes), 2)
+        self.assertEqual(routes[1][0].id, "a2")
+
+        self.assertEqual(pinned_attrs(r0), [("t", "x"), ("t", "y")])
+        self.assertFalse(is_attr_free(("t", "x"), r0))
+        self.assertTrue(is_attr_free(("t", "z"), r0))
+        self.assertEqual(atom_for_attr(r0, "t", "y").id, "b1")
+        self.assertEqual(representative_value(a1), 1)
+        self.assertEqual(representative_value(Atom("t", "z", intervals=[(10, 20)])), 11)
+        self.assertEqual(representative_value(Atom("t", "s", kind="text", text=("like", "ab%"))), "aba")
+        pins = route_pin_values(r0)
+        self.assertEqual(pins[("t", "x")], 1)
+        self.assertEqual(pins[("t", "y")], "hi")
+        snaps = route_row_snapshots(cnf, r0)
+        self.assertEqual(snaps, [{"v": 1}, {"v": "hi"}])
+        self.assertEqual(cnf_attrs(cnf), [("t", "x"), ("t", "y")])
+
+        self.assertFalse(has_cnf_routes(None))
+        self.assertFalse(has_cnf_routes(CNF()))
+        self.assertIsNone(select_route(None))
+        self.assertEqual(route_pin_values(None), {})
+
+    def test_genpipeline_context_exposes_cnf_route_and_pins(self):
+        cnf = CNF(clauses=[Clause(atoms=[Atom("t", "x", intervals=[(5, 5)], id="a1")])], row_of={"a1": {"r": 1}})
+        ctx = GenPipelineContext(["t"], _AoaStub(), _FilterExtractorStub(), {}, None, cnf=cnf)
+        self.assertIsNotNone(ctx.cnf_route)
+        self.assertEqual(ctx.cnf_pin_values.get(("t", "x")), 5)
+
+        ctx2 = GenPipelineContext(["t"], _AoaStub(), _FilterExtractorStub(), {}, None, cnf=None)
+        self.assertIsNone(ctx2.cnf_route)
+        self.assertEqual(ctx2.cnf_pin_values, {})
+
+    def test_base_generation_pin_helpers_guarded(self):
+        # Minimal duck-typed object exercising GenerationPipeLineBase methods.
+        from mysite.unmasque.src.core.abstract.GenerationPipeLineBase import GenerationPipeLineBase
+
+        obj = SimpleNamespace()
+        obj.cnf_pin_values = {("t", "x"): 7}
+        obj.filter_attrib_dict = {}
+        obj.get_datatype = lambda key: "int"
+        obj.get_s_val_for_textType = lambda a, t: "x"
+        obj.logger = _NullLogger()
+        self.assertEqual(GenerationPipeLineBase.get_cnf_pinned_or_none(obj, "t", "x"), 7)
+        self.assertIsNone(GenerationPipeLineBase.get_cnf_pinned_or_none(obj, "t", "y"))
+        self.assertEqual(GenerationPipeLineBase.get_s_val(obj, "x", "t"), 7)
+
+        obj2 = SimpleNamespace()
+        obj2.cnf_pin_values = {}
+        obj2.filter_attrib_dict = {("t", "n"): (10, 20)}
+        obj2.get_datatype = lambda key: "int"
+        obj2.get_s_val_for_textType = lambda a, t: "x"
+        obj2.logger = _NullLogger()
+        self.assertEqual(GenerationPipeLineBase.get_s_val(obj2, "n", "t"), 10)
 
 
 if __name__ == "__main__":
