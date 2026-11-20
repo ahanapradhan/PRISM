@@ -29,6 +29,7 @@ class QueryDetails:
         self.all_aoa = []
         self.join_edges = []
         self.or_predicates = []
+        self.cnf = None
 
         self.projection_names = []
         self.global_projected_attributes = []
@@ -54,6 +55,7 @@ class QueryDetails:
         self.global_projected_attributes = other.global_projected_attributes
         self.global_groupby_attributes = other.global_groupby_attributes
         self.global_aggregated_attributes = other.global_aggregated_attributes
+        self.cnf = getattr(other, 'cnf', None)
 
     def add_to_where_op(self, predicate):
         if self.where_op and predicate not in self.where_op:
@@ -232,6 +234,9 @@ class QueryStringGenerator:
             for pred in remnants.filter_in_predicates:
                 if pred not in self._workingCopy.filter_in_predicates:
                     self._workingCopy.filter_in_predicates.append(pred)
+            # B13 (guarded): carry CNF for route-aware rendering/diagnostics when present.
+            if getattr(remnants, 'cnf', None) is not None:
+                self._workingCopy.cnf = remnants.cnf
         self._workingCopy.optimize_arithmetic_filters()
 
     @property

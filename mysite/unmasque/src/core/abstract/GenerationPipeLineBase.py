@@ -44,6 +44,10 @@ class GenerationPipeLineBase(MutationPipeLineBase):
         self.joined_attribs = genCtx.joined_attribs
         self.filter_in_predicates = genCtx.filter_in_predicates
         self.get_datatype = genCtx.get_datatype  # method
+        # B13: CNF route awareness (guarded; defaults to legacy behavior when absent)
+        self.cnf = getattr(genCtx, 'cnf', None)
+        self.cnf_route = getattr(genCtx, 'cnf_route', None)
+        self.cnf_pin_values = getattr(genCtx, 'cnf_pin_values', {}) or {}
 
     def extract_params_from_args(self, args):
         return args[0]
@@ -136,7 +140,16 @@ class GenerationPipeLineBase(MutationPipeLineBase):
                     self.get_fully_qualified_table_name(tabname), attrib, val)
         self.connectionHelper.execute_sql([update_q])
 
+    def get_cnf_pinned_or_none(self, tabname: str, attrib: str):
+        pin = getattr(self, 'cnf_pin_values', None) or {}
+        return pin.get((tabname, attrib), None)
+
     def get_s_val(self, attrib: str, tabname: str) -> Union[int, float, date, str]:
+        # B13: prefer CNF-pinned route value when available.
+        getter = getattr(self, 'get_cnf_pinned_or_none', None)
+        pinned = getter(tabname, attrib) if callable(getter) else GenerationPipeLineBase.get_cnf_pinned_or_none(self, tabname, attrib)
+        if pinned is not None:
+            return pinned
         datatype = self.get_datatype((tabname, attrib))
         if datatype in NON_TEXT_TYPES:
             if (tabname, attrib) in self.filter_attrib_dict.keys():

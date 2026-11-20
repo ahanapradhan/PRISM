@@ -284,6 +284,11 @@ class Aggregation(GenerationPipeLineBase):
                 if attrib_inner == attrib or attrib_inner in key_set:
                     column_specs.append((attrib_inner, datatype, True, None))
                     continue
+                # B13 (guarded): prefer CNF route-pinned value for non-varying fillers.
+                pinned = self.get_cnf_pinned_or_none(tabname_inner, attrib_inner) if hasattr(self, 'get_cnf_pinned_or_none') else None
+                if pinned is not None:
+                    column_specs.append((attrib_inner, datatype, False, pinned))
+                    continue
                 filter_key = (tabname_inner, attrib_inner)
                 if datatype == 'date':
                     # check for filter

@@ -372,7 +372,11 @@ class Projection(GenerationPipeLineBase):
         mini = constants.pr_min
         maxi = constants.pr_max
         s_val = None
-        if key in self.or_predicates_dict.keys():
+        # B13 (guarded): prefer CNF route-pinned value for consistency.
+        pin = getattr(self, 'cnf_pin_values', None) or {}
+        if key in pin and pin[key] is not None:
+            s_val = pin[key]
+        elif key in self.or_predicates_dict.keys():
             s_val = self.__assign_next_s_value_for_or_attrib([self.get_dmin_val(key[1], key[0])], key)
         elif key in self.filter_attrib_dict.keys():
             datatype = self.get_datatype(key)

@@ -148,6 +148,8 @@ class GenPipelineContext:
         self.arithmetic_filters = aoa_extractor.arithmetic_filters
         self.global_min_instance_dict = copy.deepcopy(global_min_instance_dict)
         self.cnf = cnf
+        self.cnf_route = None
+        self.cnf_pin_values = {}
         self.__or_predicates = or_predicates
         # Backward-compatible flattening: if legacy slots are absent but CNF is
         # provided, derive slot-wise alternatives for existing downstream logic.
@@ -160,6 +162,16 @@ class GenPipelineContext:
         if self.__or_predicates is None:
             self.__or_predicates = []
         self.filter_in_predicates = []
+        # B13 (guarded): preselect a default route/pinning map for downstream use.
+        if self.cnf is not None:
+            try:
+                from ..disjunction.routes import has_cnf_routes, route_pin_values, select_route
+                if has_cnf_routes(self.cnf):
+                    self.cnf_route = select_route(self.cnf, route_index=0)
+                    self.cnf_pin_values = route_pin_values(self.cnf_route)
+            except Exception:
+                self.cnf_route = None
+                self.cnf_pin_values = {}
 
         self.__algebraic_eq_predicates = aoa_extractor.algebraic_eq_predicates
         self.global_join_graph = []

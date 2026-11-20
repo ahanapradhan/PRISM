@@ -214,23 +214,29 @@ class OrderBy(GenerationPipeLineBase):
     def _candidate_value_pairs(self, tab, attrib, datatype, limit=24):
         """Generate progressively different probe values for one column."""
         filt = self._filter_base_value(tab, attrib)
+        pinned = self.get_cnf_pinned_or_none(tab, attrib) if hasattr(self, 'get_cnf_pinned_or_none') else None
         if datatype == 'str':
-            return [(chr(ord('A')), chr(ord('A') + step))
+            base_char = 'A'
+            if pinned is not None:
+                base_char = str(pinned)[0] if str(pinned) else 'A'
+            elif filt is not None:
+                base_char = str(filt)[0] if str(filt) else 'A'
+            return [(base_char, chr(ord(base_char[0]) + step) if base_char else chr(ord('A') + step))
                     for step in range(1, limit + 1)]
         if datatype == 'date':
-            base = filt if filt is not None else datetime.date(1000, 1, 1)
+            base = pinned if pinned is not None else (filt if filt is not None else datetime.date(1000, 1, 1))
             if not isinstance(base, datetime.date):
                 base = datetime.date(1000, 1, 1)
             return [(base, base + datetime.timedelta(days=step))
                     for step in range(1, limit + 1)]
         if datatype == 'numeric':
-            base = filt if filt is not None else 1000.0
+            base = pinned if pinned is not None else (filt if filt is not None else 1000.0)
             try:
                 base = float(base)
             except (TypeError, ValueError):
                 base = 1000.0
             return [(base, base + step) for step in range(1, limit + 1)]
-        base = filt if filt is not None else 1000
+        base = pinned if pinned is not None else (filt if filt is not None else 1000)
         try:
             base = int(base)
         except (TypeError, ValueError):

@@ -108,6 +108,11 @@ class GroupBy(GenerationPipeLineBase):
             else:
                 insert_values.append(get_format('int', val))
         else:
+            if hasattr(self, 'get_cnf_pinned_or_none'):
+                pinned = self.get_cnf_pinned_or_none(tabname_inner, attrib_inner)
+                if pinned is not None:
+                    insert_values.append(pinned)
+                    return
             if (tabname_inner, attrib_inner) in self.filter_attrib_dict.keys():
                 filtered_val = self.get_s_val_for_textType(attrib_inner, tabname_inner)
                 char_val = filtered_val.replace('%', '')
@@ -138,6 +143,11 @@ class GroupBy(GenerationPipeLineBase):
                 insert_values.append(plus_val)
 
     def get_insert_value_for_single_attrib(self, datatype, attrib_inner, tabname_inner):
+        # B13 (guarded): prefer CNF route-pinned value for non-varying attributes.
+        if hasattr(self, 'get_cnf_pinned_or_none'):
+            pinned = self.get_cnf_pinned_or_none(tabname_inner, attrib_inner)
+            if pinned is not None:
+                return pinned
         if (tabname_inner, attrib_inner) in self.filter_attrib_dict.keys():
             val = self.filter_attrib_dict[(tabname_inner, attrib_inner)][0]
             val = get_boundary_value(val, is_ub=False)

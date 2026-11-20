@@ -90,7 +90,8 @@ class Limit(GenerationPipeLineBase):
                 insert_values.append(grouping_attribute_values[attrib_inner][k])
             elif attrib_inner not in self.joined_attribs \
                     and (tabname_inner, attrib_inner) not in gb_tab_attribs:
-                insert_values.append(self.get_dmin_val(attrib_inner, tabname_inner))
+                pinned = self.get_cnf_pinned_or_none(tabname_inner, attrib_inner) if hasattr(self, 'get_cnf_pinned_or_none') else None
+                insert_values.append(pinned if pinned is not None else self.get_dmin_val(attrib_inner, tabname_inner))
             elif datatype in NON_TEXT_TYPES:
                 self.insert_non_text_attrib(datatype, attrib_inner, insert_values, k, tabname_inner)
             else:

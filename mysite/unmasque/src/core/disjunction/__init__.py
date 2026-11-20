@@ -20,6 +20,18 @@ from .extraction import (
 from .model import Atom, Clause, CNF, atom_from_legacy_pred, atoms_from_or_slot, cnf_to_legacy_or_predicates, legacy_or_predicates_to_cnf
 from .prep import DbRestorePoint, StateSnapshot, deep_snapshot, drop_not_null_constraints, drop_not_null_sql, restore_snapshot
 from .primitives import is_not_true, is_true, keep_predicate_sql, remove_predicate_sql, sat_result
+from .routes import (
+    atom_for_attr,
+    cnf_attrs,
+    has_cnf_routes,
+    is_attr_free,
+    iter_routes,
+    pinned_attrs,
+    representative_value,
+    route_pin_values,
+    route_row_snapshots,
+    select_route,
+)
 
 __all__ = [
     "Atom",
@@ -52,4 +64,15 @@ __all__ = [
     "keep_predicate_sql",
     "remove_predicate_sql",
     "sat_result",
+    "atom_for_attr",
+    "cnf_attrs",
+    "has_cnf_routes",
+    "is_attr_free",
+    "iter_routes",
+    "pinned_attrs",
+    "representative_value",
+    "route_pin_values",
+    "route_row_snapshots",
+    "select_route",
 ]
+
