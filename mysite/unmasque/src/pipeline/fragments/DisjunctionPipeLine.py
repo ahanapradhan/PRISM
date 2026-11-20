@@ -51,6 +51,29 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         self.disjunction_cnf = None
         self.disjunction_statuses = None
 
+    def get_disjunction_diagnostics(self):
+        """B12 (guarded): return lightweight CNF/status diagnostics when available."""
+        diag = {
+            "mode": str(getattr(getattr(self, 'connectionHelper', None), 'config', None) and getattr(self.connectionHelper.config, 'disjunction_mode', 'legacy') or 'legacy'),
+            "has_cnf": getattr(self, 'disjunction_cnf', None) is not None,
+            "statuses": None,
+            "cnf": None,
+        }
+        statuses = getattr(self, 'disjunction_statuses', None)
+        if statuses is not None:
+            try:
+                diag["statuses"] = [(getattr(s, 'clause_id', None), getattr(s, 'status', None), getattr(s, 'reason', None)) for s in statuses]
+            except Exception:
+                diag["statuses"] = statuses
+        cnf = getattr(self, 'disjunction_cnf', None)
+        if cnf is not None:
+            try:
+                from ...core.disjunction.routes import verify_cnf_structure
+                diag["cnf"] = verify_cnf_structure(cnf)
+            except Exception:
+                diag["cnf"] = {"present": True, "error": "verification_failed"}
+        return diag
+
     def _mutation_pipeline(self, core_relations, query, time_profile, restore_details=None,
                            expect_populated=True):
         self.update_state(RESTORE_DB + START)

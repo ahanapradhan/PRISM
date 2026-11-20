@@ -27,6 +27,17 @@ class ExtractionResult:
     statuses: List[ClauseStatus] = field(default_factory=list)
     legacy_or_predicates: list = field(default_factory=list)
     complete: bool = True
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
+
+    def summary(self) -> Dict[str, Any]:
+        statuses = self.statuses or []
+        return {
+            "complete": bool(self.complete),
+            "clauses": len(getattr(self.cnf, "clauses", []) or []),
+            "ok_clauses": sum(1 for s in statuses if getattr(s, "status", None) == "OK"),
+            "statuses": [(getattr(s, "clause_id", None), getattr(s, "status", None), getattr(s, "reason", None)) for s in statuses],
+            "diagnostics": dict(self.diagnostics or {}),
+        }
 
 
 class CNFDisjunctionExtractor:
@@ -55,8 +66,15 @@ class CNFDisjunctionExtractor:
         self.minimize = minimize
         self.snapshot_dm = snapshot_dm or (lambda s: copy.deepcopy(s))
         self.restore_snap0 = restore_snap0 or (lambda: None)
-        self.max_iters = max_iters
-        self.max_retries_zero_atoms = max_retries_zero_atoms
+        # B10 hardening: clamp/validate guardrails to safe positive values.
+        try:
+            self.max_iters = max(1, int(max_iters))
+        except Exception:
+            self.max_iters = 10000
+        try:
+            self.max_retries_zero_atoms = max(1, int(max_retries_zero_atoms))
+        except Exception:
+            self.max_retries_zero_atoms = 3
 
     def _mk_clause(self, idx: int, atoms: Sequence[Atom]) -> Clause:
         clause = Clause(id=str(idx), atoms=list(atoms))
@@ -65,18 +83,31 @@ class CNFDisjunctionExtractor:
     def extract(self, dm0_state: Any = None) -> ExtractionResult:
         statuses: List[ClauseStatus] = []
         cnf = CNF()
+        diagnostics: Dict[str, Any] = {
+            "iterations": 0,
+            "satisfier_checks": 0,
+            "minimize_calls": 0,
+            "extract_calls": 0,
+            "retries": 0,
+            "clauses_incomplete": 0,
+            "clauses_no_progress": 0,
+            "clauses_unsupported": 0,
+        }
 
         # Step 1: initial atoms, one per clause (best-effort scaffold)
         try:
+            diagnostics["extract_calls"] += 1
             atoms0, row0 = self.extract_atoms(dm0_state, excluded_attrs=[], own_atoms=[])
         except Exception as e:
             self.restore_snap0()
-            return ExtractionResult(cnf=cnf, statuses=[ClauseStatus("init", "INCOMPLETE", str(e))], complete=False)
+            diagnostics["error"] = str(e)
+            return ExtractionResult(cnf=cnf, statuses=[ClauseStatus("init", "INCOMPLETE", str(e))], complete=False, diagnostics=diagnostics)
         self.restore_snap0()
 
         if not atoms0:
             statuses.append(ClauseStatus("init", "AMBIGUOUS_COHOLD", "No initial atoms extracted"))
-            return ExtractionResult(cnf=cnf, statuses=statuses, complete=False)
+            diagnostics["clauses_incomplete"] += 1
+            return ExtractionResult(cnf=cnf, statuses=statuses, complete=False, diagnostics=diagnostics)
 
         for i, atom in enumerate(atoms0):
             atom = copy.deepcopy(atom)
@@ -97,12 +128,16 @@ class CNFDisjunctionExtractor:
             iters = 0
             while True:
                 iters += 1
+                diagnostics["iterations"] += 1
                 if iters > self.max_iters:
                     st.status = "NO_PROGRESS"
                     st.reason = f"MAX_ITERS({self.max_iters}) exceeded"
+                    diagnostics["clauses_no_progress"] += 1
                     break
+                diagnostics["satisfier_checks"] += 1
                 if not self.exists_satisfier(i, known_i, cnf, {"iter": iters}):
                     break
+                diagnostics["minimize_calls"] += 1
                 dm = self.minimize(i, known_i, cnf, {"iter": iters})
                 excluded = []
                 for k, other in enumerate(cnf.clauses):
@@ -115,7 +150,10 @@ class CNFDisjunctionExtractor:
                 new_atoms = []
                 row = None
                 # retry on empty result (B6)
-                for _ in range(max(1, self.max_retries_zero_atoms)):
+                for retry in range(max(1, self.max_retries_zero_atoms)):
+                    if retry > 0:
+                        diagnostics["retries"] += 1
+                    diagnostics["extract_calls"] += 1
                     new_atoms, row = self.extract_atoms(dm, excluded_attrs=excluded, own_atoms=known_i)
                     if len(new_atoms) != 0:
                         break
@@ -131,6 +169,7 @@ class CNFDisjunctionExtractor:
                     if self._atom_implied_or_duplicate(p, known_i):
                         st.status = "NO_PROGRESS"
                         st.reason = "Extracted atom implied/duplicate; cannot make progress"
+                        diagnostics["clauses_no_progress"] += 1
                         break
                     clause.atoms.append(p)
                     known_i.append(p)
@@ -140,16 +179,19 @@ class CNFDisjunctionExtractor:
                     if progress_key == prev_progress_key:
                         st.status = "NO_PROGRESS"
                         st.reason = "No progress in clause state"
+                        diagnostics["clauses_no_progress"] += 1
                         break
                     prev_progress_key = progress_key
                     continue
                 elif len(new_atoms) == 0:
                     st.status = "INCOMPLETE"
                     st.reason = "AMBIGUOUS_COHOLD"
+                    diagnostics["clauses_incomplete"] += 1
                     break
                 else:
                     st.status = "UNSUPPORTED_SHAPE"
                     st.reason = "Multiple jointly necessary atoms (conjunctive disjunct or A2 violation)"
+                    diagnostics["clauses_unsupported"] += 1
                     break
 
         # Step 3: interval split scaffold (B8) - placeholder hook
@@ -159,7 +201,8 @@ class CNFDisjunctionExtractor:
         self._canonicalize(cnf)
         legacy = cnf_to_legacy_or_predicates(cnf)
         complete = all(s.status == "OK" for s in statuses) and len(statuses) == len(cnf.clauses)
-        return ExtractionResult(cnf=cnf, statuses=statuses, legacy_or_predicates=legacy, complete=complete)
+        diagnostics["complete"] = complete
+        return ExtractionResult(cnf=cnf, statuses=statuses, legacy_or_predicates=legacy, complete=complete, diagnostics=diagnostics)
 
     @staticmethod
     def _atom_implied_or_duplicate(atom: Atom, known_atoms: Sequence[Atom]) -> bool:

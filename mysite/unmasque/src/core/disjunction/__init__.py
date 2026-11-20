@@ -31,6 +31,7 @@ from .routes import (
     route_pin_values,
     route_row_snapshots,
     select_route,
+    verify_cnf_structure,
 )
 
 __all__ = [
@@ -74,5 +75,6 @@ __all__ = [
     "route_pin_values",
     "route_row_snapshots",
     "select_route",
+    "verify_cnf_structure",
 ]
 

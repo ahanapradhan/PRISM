@@ -16,11 +16,12 @@ def has_cnf_routes(cnf: Optional[CNF]) -> bool:
     return bool(cnf is not None and getattr(cnf, "clauses", None) and len(cnf.clauses) > 0)
 
 
-def iter_routes(cnf: CNF):
+def iter_routes(cnf: CNF, max_routes: Optional[int] = None):
     """Yield deterministic routes as tuples of one Atom per clause.
 
     Cartesian product in clause order, atom order within clause. Intended for
-    small CNFs/tests; callers should cap consumption.
+    small CNFs/tests; callers should cap consumption. `max_routes` (B10) can be
+    used to bound enumeration.
     """
     if not has_cnf_routes(cnf):
         return
@@ -29,12 +30,16 @@ def iter_routes(cnf: CNF):
         return
 
     idxs = [0] * len(clauses)
+    yielded = 0
 
     def build():
         return tuple(copy.deepcopy(clauses[i][idxs[i]]) for i in range(len(clauses)))
 
     while True:
+        if max_routes is not None and yielded >= max_routes:
+            return
         yield build()
+        yielded += 1
         # increment like odometer from rightmost
         for i in range(len(idxs) - 1, -1, -1):
             idxs[i] += 1
@@ -159,3 +164,39 @@ def cnf_attrs(cnf: Optional[CNF]) -> List[Tuple[str, str]]:
                     seen.add(pair)
                     out.append(pair)
     return out
+
+
+def verify_cnf_structure(cnf: Optional[CNF]) -> Dict[str, Any]:
+    """B12: lightweight structural verification/report for CNF objects."""
+    report = {
+        "present": cnf is not None,
+        "has_routes": has_cnf_routes(cnf),
+        "clauses": 0,
+        "atoms": 0,
+        "empty_clauses": 0,
+        "missing_atom_ids": 0,
+        "missing_row_snapshots": 0,
+        "issues": [],
+    }
+    if cnf is None:
+        report["issues"].append("cnf is None")
+        return report
+    clauses = getattr(cnf, "clauses", None) or []
+    row_of = getattr(cnf, "row_of", {}) or {}
+    report["clauses"] = len(clauses)
+    for idx, clause in enumerate(clauses):
+        atoms = getattr(clause, "atoms", None) or []
+        if not atoms:
+            report["empty_clauses"] += 1
+            report["issues"].append(f"clause[{idx}] is empty")
+        for atom in atoms:
+            report["atoms"] += 1
+            aid = getattr(atom, "id", None)
+            if not aid:
+                report["missing_atom_ids"] += 1
+            elif aid not in row_of:
+                report["missing_row_snapshots"] += 1
+    if report["empty_clauses"] == 0 and report["clauses"] > 0 and report["has_routes"] is False:
+        report["issues"].append("clauses present but routes unavailable")
+    report["ok"] = (len(report["issues"]) == 0)
+    return report

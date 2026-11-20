@@ -45,6 +45,10 @@ class Config:
         # Disjunction/CNF extraction mode scaffolding (step 1, inert by default).
         # 'legacy' preserves current detect_or behavior.
         self.disjunction_mode = "legacy"
+        # Step 7 diagnostics/hardening knobs (optional, safe defaults).
+        self.disjunction_max_iters = 10000
+        self.disjunction_max_routes = 128
+        self.disjunction_diagnostics = True
         self.app_type = ApplicationType.SQL_ERR_FWD
         self.database = "postgres"
         self.table_sizes_dict = {}
@@ -124,6 +128,20 @@ class Config:
                 self.disjunction_mode = "legacy"
         except Exception:
             self.disjunction_mode = "legacy"
+        # Optional Step 7 diagnostics/hardening config (safe defaults on missing/invalid).
+        try:
+            self.disjunction_max_iters = max(1, int(config_object.get(FEATURE_SECTION, "disjunction_max_iters", fallback=self.disjunction_max_iters)))
+        except Exception:
+            self.disjunction_max_iters = 10000
+        try:
+            self.disjunction_max_routes = max(1, int(config_object.get(FEATURE_SECTION, "disjunction_max_routes", fallback=self.disjunction_max_routes)))
+        except Exception:
+            self.disjunction_max_routes = 128
+        try:
+            diag = config_object.get(FEATURE_SECTION, "disjunction_diagnostics", fallback="yes")
+            self.disjunction_diagnostics = str(diag).lower() not in ("no", "false", "0", "off")
+        except Exception:
+            self.disjunction_diagnostics = True
 
         detect_oj = config_object.get(FEATURE_SECTION, DETECT_OJ)
         if detect_oj.lower() == "no":
