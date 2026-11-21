@@ -65,6 +65,7 @@ from mysite.unmasque.src.core.abstract.ExtractorBase import Base  # noqa: E402
 from .copy_based_minimizer import CopyBasedMinimizer  # noqa: E402
 from .view_minimizer import ViewMinimizer  # noqa: E402
 from .pk_view_minimizer import PKViewMinimizer  # noqa: E402
+from .hybrid_minimizer import HybridMinimizer  # noqa: E402
 from mysite.unmasque.src.util.ConnectionFactory import ConnectionHelperFactory  # noqa: E402
 from mysite.unmasque.src.util.Log import Log  # noqa: E402
 
@@ -74,12 +75,16 @@ DEFAULT_RUNS = 3
 MINIMIZERS = (
     ("CopyBasedMinimizer", CopyBasedMinimizer, "copy"),
     ("ViewMinimizer", ViewMinimizer, "view"),
+    ("PKViewMinimizer", PKViewMinimizer, "view"),
+    ("HybridMinimizer", HybridMinimizer, "hybrid"),
 )
 
 EXPERIMENTS = {
     "expt1": (
         ("CopyBasedMinimizer", CopyBasedMinimizer, "copy"),
         ("ViewMinimizer", ViewMinimizer, "view"),
+        ("PKViewMinimizer", PKViewMinimizer, "view"),
+        ("HybridMinimizer", HybridMinimizer, "hybrid"),
     ),
     "expt2": (
         ("ViewMinimizer", ViewMinimizer, "view"),
@@ -323,6 +328,7 @@ MINIMIZER_COLORS = {
     "ViewMinimizer": "tab:blue",
     "CopyBasedMinimizer": "tab:orange",
     "PKViewMinimizer": "tab:green",
+    "HybridMinimizer": "tab:red",
 }
 
 TIMING_FIELDS = ["run", "iteration", "table", "rep", "create_s", "index_s", "analyze_s", "exec_s",
@@ -530,6 +536,9 @@ class CopyBasedMinimizerExperiment(unittest.TestCase):
 
     def _restart_database(self):
         """Restart PostgreSQL and wait until a *new* postmaster accepts queries."""
+        if os.environ.get("PRISM_MQ_SKIP_RESTART", "").strip().lower() in {"1", "true", "yes"}:
+            print("skipping database restart (PRISM_MQ_SKIP_RESTART set)")
+            return
         data_dir = self._data_directory(self.conn)
         old_start = self.conn.execute_sql_fetchone_0("select pg_postmaster_start_time();")
         args, use_shell, description = self._restart_command(data_dir)
