@@ -140,39 +140,57 @@ class PKViewMinimizer(ViewMinimizer):
         core_sizes[tabname] = remaining
         return core_sizes
 
+    @staticmethod
+    def _compose_pred(base_pred, col_clauses):
+        clauses = [base_pred] if base_pred and base_pred != "TRUE" else []
+        clauses.extend([c for c in col_clauses if c])
+        return " AND ".join(clauses) if clauses else "TRUE"
+
     def _halve_on_column(self, query, fq_tab, fq_dirty, dirty_name, tabname, col, pred):
-        """Recursively halve the value range of `col` inside `pred`. Returns the new predicate."""
+        """Recursively halve the value range of `col` inside `pred`. Returns the new predicate.
+
+        Keeps only the current column's active lower/upper bounds to avoid
+        accumulating subsumed predicates in the generated view.
+        """
+        base_pred = pred if pred and pred != "TRUE" else "TRUE"
         data_type = self._column_type(dirty_name, col)
         is_int = data_type in INT_TYPES
         is_text = data_type in TEXT_TYPES
         ce = f'{col} COLLATE "default"' if is_text else col
 
+        lower_clause = ""
+        upper_clause = ""
+
+        def current_pred():
+            return self._compose_pred(base_pred, [lower_clause, upper_clause])
+
+        cur = current_pred()
         if is_int:
             lo, hi = self.connectionHelper.execute_sql_fetchone(
-                f"SELECT min({ce}), max({ce}) FROM {fq_dirty} WHERE {pred};")
+                f"SELECT min({ce}), max({ce}) FROM {fq_dirty} WHERE {cur};")
             mid = None
         else:
-            lo, hi, mid = self._stats(fq_dirty, ce, pred)
+            lo, hi, mid = self._stats(fq_dirty, ce, cur)
 
         while lo is not None and lo != hi:
             if is_int:
                 mid = (lo + hi) // 2
             elif mid == hi:
                 mid = self.connectionHelper.execute_sql_fetchone(
-                    f"SELECT max({ce}) FROM {fq_dirty} WHERE {pred} AND {ce} < {self._lit(hi)};")[0]
+                    f"SELECT max({ce}) FROM {fq_dirty} WHERE {cur} AND {ce} < {self._lit(hi)};")[0]
 
-            left = f"{pred} AND {ce} <= {self._lit(mid)}"
-            right = f"{pred} AND {ce} > {self._lit(mid)}"
+            left = self._compose_pred(base_pred, [lower_clause, f"{ce} <= {self._lit(mid)}"])
+            right = self._compose_pred(base_pred, [f"{ce} > {self._lit(mid)}", upper_clause])
 
             self.iteration += 1
             self._iteration_hooked = False
             self._probe_measured = False
             self.logger.debug(f"MIN_ITER_START: {self.iteration} {tabname} (pk {col})")
             if self._probe_pk(query, fq_tab, fq_dirty, tabname, left):
-                pred = left
+                upper_clause = f"{ce} <= {self._lit(mid)}"
                 hi = mid if is_int else None
             elif self._probe_pk(query, fq_tab, fq_dirty, tabname, right):
-                pred = right
+                lower_clause = f"{ce} > {self._lit(mid)}"
                 lo = mid + 1 if is_int else None
             else:
                 self.logger.error("Cannot halve anymore..")
@@ -180,9 +198,11 @@ class PKViewMinimizer(ViewMinimizer):
                 break
             self.logger.debug(f"MIN_ITER_END: {self.iteration}")
 
+            cur = current_pred()
             if not is_int:
-                lo, hi, mid = self._stats(fq_dirty, ce, pred)
-        return pred
+                lo, hi, mid = self._stats(fq_dirty, ce, cur)
+
+        return current_pred()
 
     # ------------------------------------------------------------------ instrumented probe
     def _probe_pk(self, query, fq_tab, fq_dirty, tabname, pred):

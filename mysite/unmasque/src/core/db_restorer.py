@@ -227,13 +227,60 @@ class DbRestorer(AppExtractorBase):
             self.connectionHelper.queries.get_row_count(self.get_fully_qualified_table_name(tab)), self.logger)
         if row_count is None:  # table does not exists
             self.connectionHelper.rollback_transaction()
-            self.connectionHelper.execute_sql([self.connectionHelper.queries.create_table_like(
-                self.get_fully_qualified_table_name(tab), self.get_original_table_name(tab)),
-                                               self.connectionHelper.queries.insert_into_tab_select_star_fromtab(
-                                                   self.get_fully_qualified_table_name(tab),
-                                                   self.get_original_table_name(tab))],
-                                              self.logger)
-            self.connectionHelper.commit_transaction()
+            if self._native_copy_enabled():
+                try:
+                    self.drop_derived_relations(tab)
+                    self._end_open_transaction()
+                    result = run_native_copy(
+                        self.connectionHelper.config,
+                        source_schema=self.connectionHelper.config.user_schema,
+                        dest_schema=self.connectionHelper.config.schema,
+                        tables=[tab],
+                        sql="like_insert",
+                        rows=self._known_sizes([tab], self.all_sizes),
+                        max_threads=default_threads(),
+                        index_threads=default_index_threads(),
+                        mode="restore",
+                        logger=self.logger,
+                    )
+                    self._log_native_result("restore", result)
+                except NativeCopyError as error:
+                    self.logger.error(f"Native restore of missing {tab} failed, falling back: {error}")
+                    self._end_open_transaction()
+                    self.connectionHelper.execute_sql([self.connectionHelper.queries.create_table_like(
+                        self.get_fully_qualified_table_name(tab), self.get_original_table_name(tab)),
+                                                       self.connectionHelper.queries.insert_into_tab_select_star_fromtab(
+                                                           self.get_fully_qualified_table_name(tab),
+                                                           self.get_original_table_name(tab))],
+                                                      self.logger)
+                    self.connectionHelper.commit_transaction()
+            else:
+                method = self._backup_method()
+                if method in ("native", "threaded"):
+                    try:
+                        self._end_open_transaction()
+                        from ..util.threaded_copy import parallel_copy_table
+                        parallel_copy_table(self.connectionHelper.config,
+                                            self.connectionHelper.config.user_schema,
+                                            self.connectionHelper.config.schema, tab,
+                                            logger=self.logger)
+                    except Exception as error:
+                        self.logger.error(f"Threaded restore of missing {tab} failed, falling back to serial: {error}")
+                        self.connectionHelper.execute_sql([self.connectionHelper.queries.create_table_like(
+                            self.get_fully_qualified_table_name(tab), self.get_original_table_name(tab)),
+                                                           self.connectionHelper.queries.insert_into_tab_select_star_fromtab(
+                                                               self.get_fully_qualified_table_name(tab),
+                                                               self.get_original_table_name(tab))],
+                                                          self.logger)
+                        self.connectionHelper.commit_transaction()
+                else:
+                    self.connectionHelper.execute_sql([self.connectionHelper.queries.create_table_like(
+                        self.get_fully_qualified_table_name(tab), self.get_original_table_name(tab)),
+                                                       self.connectionHelper.queries.insert_into_tab_select_star_fromtab(
+                                                           self.get_fully_qualified_table_name(tab),
+                                                           self.get_original_table_name(tab))],
+                                                      self.logger)
+                    self.connectionHelper.commit_transaction()
             row_count = self.connectionHelper.execute_sql_fetchone_0(
                 self.connectionHelper.queries.get_row_count(self.get_fully_qualified_table_name(tab)), self.logger)
         self.last_restored_size[tab] = row_count
