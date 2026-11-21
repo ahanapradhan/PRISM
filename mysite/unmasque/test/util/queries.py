@@ -109,28 +109,6 @@ Q10_simple = "select c_custkey, c_name, sum(l_extendedprice) as revenue, " \
              "and l_returnflag = 'R' and c_nationkey = n_nationkey group by " \
              "c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, c_comment;"
 
-def get_subquery1():
-    return "SELECT c_name as name, (c_acctbal - o_totalprice) as account_balance " \
-           "FROM orders, customer, nation WHERE c_custkey = o_custkey " \
-           "and c_nationkey = n_nationkey " \
-           "and c_mktsegment = 'FURNITURE'" \
-           "and n_name = 'INDIA' " \
-           "and o_orderdate between '1998-01-01' and '1998-01-05' " \
-           "and o_totalprice <= c_acctbal;", ['customer', 'orders', 'nation']
-
-
-def get_subquery2():
-    return "SELECT s_name as name, " \
-           "(s_acctbal + o_totalprice) as account_balance " \
-           "FROM supplier, lineitem, orders, nation " \
-           "WHERE l_suppkey = s_suppkey " \
-           "and l_orderkey = o_orderkey " \
-           "and s_nationkey = n_nationkey and n_name = 'ARGENTINA' " \
-           "and o_orderdate between '1998-01-01' and '1998-01-05' " \
-           "and o_totalprice >= s_acctbal and o_totalprice >= 30000 " \
-           "and 50000 > s_acctbal;", ['orders', 'lineitem', 'supplier', 'nation']
-
-
 queries_dict = {'tpch_query3': tpch_query3,
                 'Q1': Q1,
                 'Q3': Q3,

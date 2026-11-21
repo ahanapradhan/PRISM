@@ -135,3 +135,13 @@ class NullFreeExecutable(Executable):
 
     def isQ_result_has_some_data(self, Res):
         return is_result_has_some_data(Res, self.logger)
+
+    def is_query_result_no_full_nullfree_row(self, query):
+        q = self._strip_query_terminator(query)
+        # The builder keeps ROW(q.*) IS NOT NULL: true exactly when no column
+        # of the row is NULL.
+        res = self.doJob(
+            self.connectionHelper.queries.select_nullfree_existence_from_query(q))
+        if not self.done or not isinstance(res, list):
+            return False
+        return len(res) <= 1    # header only => no fully non-null row

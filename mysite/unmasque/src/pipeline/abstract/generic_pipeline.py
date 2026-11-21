@@ -9,7 +9,7 @@ from ...util.Log import Log
 from ...util.constants import WAITING, DONE, WRONG, RESULT_COMPARE, START, RUNNING, ERROR
 from ...util.error_handling import UnmasqueError
 from ...util.error_codes import ERROR_000
-from ....src.core.result_comparator import ResultComparator
+from ....src.core.result_comparator import FinalResultComparator, ResultComparator
 
 
 def synchronized(wrapped):
@@ -131,7 +131,7 @@ class GenericPipeLine(ABC):
         #return True
         self.update_state(RESULT_COMPARE + START)
         self.connectionHelper.connectUsingParams(True)
-        rc = ResultComparator(self.connectionHelper, True, self.core_relations)
+        rc = FinalResultComparator(self.connectionHelper, True, self.core_relations)
         rc.full_db_restore = True
         self.update_state(RESULT_COMPARE + RUNNING)
         matched, restore_time = rc.doJob(query, result)
@@ -139,7 +139,7 @@ class GenericPipeLine(ABC):
         self.time_profile.update_for_db_restore(restore_time, 0)
         if not matched:
             self.logger.debug("Hash comparator failed. Going for comparison!..")
-            rc = ResultComparator(self.connectionHelper, False, self.core_relations)
+            rc = FinalResultComparator(self.connectionHelper, False, self.core_relations)
             self.update_state(RESULT_COMPARE + RUNNING)
             matched = rc.match(query, result)
         self.info[RESULT_COMPARE] = matched

@@ -9,8 +9,9 @@ class CommonQueries(ABC):
     def set_schema(self, schema):
         self.schema = schema
 
+    @abstractmethod
     def select_row_count_from_query(self, query):
-        return f"select count(*) from ({query});"
+        pass
 
     @abstractmethod
     def get_explain_query(self, sql):
@@ -89,6 +90,22 @@ class CommonQueries(ABC):
         pass
 
     @abstractmethod
+    def get_min_max_of_col(self, tab, col):
+        pass
+
+    @abstractmethod
+    def get_pk_columns(self, schema, tab):
+        pass
+
+    @abstractmethod
+    def create_view_as_select_star_where_pk_range(self, view, tab, col, lo, hi):
+        pass
+
+    @abstractmethod
+    def create_table_as_select_star_from_pk_range(self, tab, fromtab, col, lo, hi):
+        pass
+
+    @abstractmethod
     def create_table_as_select_star_from_ctid(self, end_ctid, start_ctid, tab, fromtab):
         pass
 
@@ -133,32 +150,31 @@ class CommonQueries(ABC):
 
     @abstractmethod
     def select_attribs_from_relation(self, tab_attribs, relation):
-        attribs = ", ".join(tab_attribs)
-        return f"select {attribs} from {relation};"
+        pass
 
     @abstractmethod
     def insert_into_tab_select_star_fromtab(self, tab, fromtab):
-        return f"Insert into {tab} Select * from {fromtab};"
+        pass
 
     @abstractmethod
     def insert_into_tab_select_star_fromtab_with_ctid(self, tab, fromtab, ctid):
-        return f"Insert into {tab} (Select * from {fromtab} Where ctid = {ctid});"
+        pass
 
     @abstractmethod
     def select_ctid_from_tabname_offset(self, tabname, offset):
-        return f"Select ctid from {tabname} offset {offset} Limit 1;"
+        pass
 
     @abstractmethod
     def select_next_ctid(self, tabname, mid_ctid1):
-        return f"Select Min(ctid) from {tabname} Where ctid > '{mid_ctid1}';"
+        pass
 
     @abstractmethod
     def select_previous_ctid(self, tab, ctid1):
-        return f"Select MAX(ctid) from {tab} Where ctid < '{ctid1}';"
+        pass
 
     @abstractmethod
     def select_max_ctid(self, tab):
-        return f"Select MAX(ctid) from {tab};"
+        pass
 
     @abstractmethod
     def select_start_ctid_of_any_table(self):
@@ -170,4 +186,64 @@ class CommonQueries(ABC):
 
     @abstractmethod
     def create_table_as_select_star_from_limit_1(self, tab, fromtab):
+        pass
+
+    @abstractmethod
+    def wrap_query_for_executable(self, schema, query):
+        pass
+
+    @abstractmethod
+    def select_limited_rows_from_query(self, query, limit):
+        pass
+
+    @abstractmethod
+    def select_nullfree_existence_from_query(self, query):
+        pass
+
+    @abstractmethod
+    def wrap_query_for_hash_aggregate_confirmation(self, query):
+        pass
+
+    @abstractmethod
+    def show_configuration(self, setting):
+        pass
+
+    @abstractmethod
+    def set_configuration(self, setting, value):
+        pass
+
+    @abstractmethod
+    def hash_aggregate_probe_settings(self):
+        pass
+
+    @abstractmethod
+    def set_search_path(self, schema):
+        pass
+
+    @abstractmethod
+    def combine_hash_queries(self, left_query, right_query):
+        pass
+
+    @abstractmethod
+    def insert_values(self, table, header, value_rows):
+        pass
+
+    @abstractmethod
+    def drop_view_or_table_cascade(self, schema, table):
+        pass
+
+    @abstractmethod
+    def create_unlogged_table_as_query(self, table, query):
+        pass
+
+    @abstractmethod
+    def create_unlogged_table_like(self, table, like_table):
+        pass
+
+    @abstractmethod
+    def insert_into_table_select_columns_from_query(self, table, columns, query):
+        pass
+
+    @abstractmethod
+    def select_except_all_existence_flags(self, left_table, right_table):
         pass

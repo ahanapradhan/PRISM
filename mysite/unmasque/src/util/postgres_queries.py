@@ -1,14 +1,23 @@
 from .abstract_queries import CommonQueries
+from .constants import WORKING_SCHEMA
 from .utils import get_format
 
 
 class PostgresQueries(CommonQueries):
+    schema = WORKING_SCHEMA
+
+    def _create_table(self, tab, definition, if_not_exists=False):
+        """Build a CREATE TABLE statement, unlogged for working-schema tables."""
+        schema = self.schema or WORKING_SCHEMA
+        table_kind = "unlogged table" if str(tab).startswith(f"{schema}.") else "table"
+        exists = " if not exists" if if_not_exists else ""
+        return f"Create {table_kind}{exists} {tab} {definition}; "
 
     def create_table_as_select_star_from_where(self, tab, fromtab, where):
-        return f"Create table {tab} as (Select * from {fromtab} where {where}); "  # \
+        return self._create_table(tab, f"as (Select * from {fromtab} where {where})")
 
     def create_table_as_select_star_from_limit_1(self, tab, fromtab):
-        return f"Create table {tab} as (Select * from {fromtab} limit 1); "  # \
+        return self._create_table(tab, f"as (Select * from {fromtab} limit 1)")
 
     def form_update_query_with_value(self, update_string, datatype, val):
         update_val = get_format(datatype, val)
@@ -33,10 +42,13 @@ class PostgresQueries(CommonQueries):
         return f"Alter view {tab} rename to {retab};"
 
     def create_table_like(self, tab, ctab):
-        return f"Create table if not exists {tab} (like {ctab} including indexes); "  # \
+        return self._create_table(tab, f"(like {ctab} including indexes)", if_not_exists=True)
 
     def create_table_as_select_star_from(self, tab, fromtab):
-        return f"Create table if not exists {tab} as select * from {fromtab}; "  # \
+        return self._create_table(tab, f"as select * from {fromtab}", if_not_exists=True)
+
+    def select_row_count_from_query(self, query):
+        return f"select count(*) from ({query});"
 
     def get_row_count(self, tab):
         return f"select count(*) from {tab};"
@@ -53,6 +65,18 @@ class PostgresQueries(CommonQueries):
     def get_min_max_ctid(self, tab):
         return f"select min(ctid), max(ctid) from {tab};"
 
+    def get_min_max_of_col(self, tab, col):
+        return f"select min({col}), max({col}) from {tab};"
+
+    def get_pk_columns(self, schema, tab):
+        """Primary-key column names of ``schema.tab`` in key order, from the catalog."""
+        return (f"select a.attname from pg_index i "
+                f"join pg_class c on c.oid = i.indrelid "
+                f"join pg_namespace n on n.oid = c.relnamespace "
+                f"join pg_attribute a on a.attrelid = c.oid and a.attnum = any(i.indkey::int2[]) "
+                f"where i.indisprimary and n.nspname = '{schema}' and c.relname = '{tab}' "
+                f"order by array_position(i.indkey::int2[], a.attnum);")
+
     def drop_view(self, tab):
         return f"drop view if exists {tab} cascade;"
 
@@ -64,12 +88,31 @@ class PostgresQueries(CommonQueries):
         _end_ctid = str(mid_ctid1)
         return f"create view {view} as select * from {tab} where ctid >= '{_start_citd}' and ctid <= '{_end_ctid}';"
 
+    def create_view_as_select_star_where_pk_range(self, view, tab, col, lo, hi):
+        """Half-open PK range view: rows with ``col`` in ``[lo, hi)``."""
+        return (f"create view {view} as select * from {tab} "
+                f"where {col} >= {self._format_pk_value(lo)} and {col} < {self._format_pk_value(hi)};")
+
+    def create_table_as_select_star_from_pk_range(self, tab, fromtab, col, lo, hi):
+        """Materialize rows with ``col`` in ``[lo, hi)`` into a real table."""
+        return self._create_table(tab, f"as select * from {fromtab} "
+                                       f"where {col} >= {self._format_pk_value(lo)} "
+                                       f"and {col} < {self._format_pk_value(hi)}")
+
+    @staticmethod
+    def _format_pk_value(val):
+        import datetime
+        if isinstance(val, datetime.datetime):
+            return f"'{val.isoformat(sep=' ')}'"
+        if isinstance(val, datetime.date):
+            return f"'{val.isoformat()}'"
+        return str(val)
+
     def create_table_as_select_star_from_ctid(self, end_ctid, start_ctid, tab, fromtab):
         _start_citd = str(start_ctid)
         _end_ctid = str(end_ctid)
-        return f"create table {tab} as select * from {fromtab} " \
-               f"where ctid >= '{_start_citd}' and ctid <= '{_end_ctid}'; "  # \
-        # f"ALTER TABLE {tab} SET (autovacuum_enabled = false);"
+        return self._create_table(tab, f"as select * from {fromtab} "
+                                       f"where ctid >= '{_start_citd}' and ctid <= '{_end_ctid}'")
 
     def get_ctid_from(self, min_or_max, tabname):
         return f"select {min_or_max}(ctid) from {tabname};"
@@ -139,3 +182,68 @@ class PostgresQueries(CommonQueries):
 
     def hashtext_query(self, tab, qualified_name):
         return f"select sum(hashtext) from (select hashtext({tab}::TEXT) FROM {qualified_name}) as T;"
+
+    def wrap_query_for_executable(self, schema, query):
+        return (f"set search_path='{schema}'; "
+                "SET enable_indexscan = on; SET enable_indexonlyscan = on; "
+                f"SET enable_seqscan = off; {query}")
+
+    def select_limited_rows_from_query(self, query, limit):
+        return f"SELECT q.* FROM ({query}) AS q LIMIT {limit};"
+
+    def select_nullfree_existence_from_query(self, query):
+        return f"SELECT 1 FROM ({query}) AS q WHERE ROW(q.*) IS NOT NULL LIMIT 1;"
+
+    HASH_AGGREGATE_PREFIX = (
+        "SET enable_sort=off; SET enable_hashagg=on; "
+        "SET enable_indexscan=off; SET enable_indexonlyscan=off; "
+        "SET enable_seqscan=on; "
+    )
+
+    def wrap_query_for_hash_aggregate_confirmation(self, query):
+        return self.HASH_AGGREGATE_PREFIX + query
+
+    def show_configuration(self, setting):
+        return f"SHOW {setting};"
+
+    def set_configuration(self, setting, value):
+        return f"SET {setting}={value};"
+
+    def hash_aggregate_probe_settings(self):
+        return [self.set_configuration("enable_sort", "off"),
+                self.set_configuration("enable_hashagg", "on")]
+
+    def set_search_path(self, schema):
+        return f"set search_path='{schema}';"
+
+    def combine_hash_queries(self, left_query, right_query):
+        return f"select ({left_query}), ({right_query});"
+
+    def insert_values(self, table, header, value_rows):
+        return f"INSERT INTO {table}{header} VALUES {', '.join(value_rows)};"
+
+    def drop_view_or_table_cascade(self, schema, table):
+        return (
+            "DO $$ BEGIN "
+            "IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE n.nspname = '{schema}' AND c.relname = '{table}' AND c.relkind = 'v') THEN "
+            f"EXECUTE 'DROP VIEW {schema}.{table} CASCADE'; "
+            "ELSIF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE n.nspname = '{schema}' AND c.relname = '{table}') THEN "
+            f"EXECUTE 'DROP TABLE {schema}.{table} CASCADE'; "
+            "END IF; END $$;")
+
+    def create_unlogged_table_as_query(self, table, query):
+        return f"create unlogged table {table} as {query};"
+
+    def create_unlogged_table_like(self, table, like_table):
+        return f"create unlogged table {table} (like {like_table});"
+
+    def insert_into_table_select_columns_from_query(self, table, columns, query):
+        return f"insert into {table} ({columns}) select {columns} from ({query}) as q;"
+
+    def select_except_all_existence_flags(self, left_table, right_table):
+        only_left = self.get_star_from_except_all_get_star_from(left_table, right_table)
+        only_right = self.get_star_from_except_all_get_star_from(right_table, left_table)
+        return (f"select exists(select 1 from {only_left} as x)::int, "
+                f"exists(select 1 from {only_right} as y)::int;")

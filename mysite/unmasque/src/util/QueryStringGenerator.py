@@ -598,8 +598,7 @@ class QueryStringGenerator:
         u_query = self.connectionHelper.queries.update_tab_attrib_with_quoted_value(tabname, attrib, temp)
         try:
             self.connectionHelper.execute_sql([u_query], self.logger)
-            new_result = self.app.doJob(query)
-            if self.app.isQ_result_no_full_nullfree_row(new_result):
+            if self.app.is_query_result_no_full_nullfree_row(query):
                 output = output + '%'
         except Exception as e:
             self.logger.debug(e)
@@ -624,16 +623,14 @@ class QueryStringGenerator:
 
             try:
                 self.connectionHelper.execute_sql([u_query])
-                new_result = self.app.doJob(query)
-                if self.app.isQ_result_empty(new_result):
+                if self.app.is_query_result_no_full_nullfree_row(query):
                     temp = copy.deepcopy(representative)
                     temp = temp[:index] + temp[index + 1:]
 
                     u_query = self.connectionHelper.queries.update_tab_attrib_with_quoted_value(tabname, attrib, temp)
                     try:
                         self.connectionHelper.execute_sql([u_query])
-                        new_result = self.app.doJob(query)
-                        if self.app.isQ_result_no_full_nullfree_row(new_result):
+                        if self.app.is_query_result_no_full_nullfree_row(query):
                             representative = representative[:index] + representative[index + 1:]
                         else:
                             output = output + "_"
@@ -666,8 +663,7 @@ class QueryStringGenerator:
             u_query = self.connectionHelper.queries.update_tab_attrib_with_quoted_value(tabname, attrib, temp_str)
             try:
                 self.connectionHelper.execute_sql([u_query])
-                new_result = self.app.doJob(query)
-                if self.app.isQ_result_no_full_nullfree_row(new_result):
+                if self.app.is_query_result_no_full_nullfree_row(query):
                     pass
                 else:
                     output = output + representative[index]

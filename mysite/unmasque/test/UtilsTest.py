@@ -1,10 +1,7 @@
 import unittest
 from frozenlist import FrozenList
-from mysite.unmasque.src.core.orderby_clause import check_sort_order
-from mysite.unmasque.src.util.configParser import Config
 from mysite.unmasque.src.core.executables.nullfree_executable import is_result_nonempty_nullfree
 from ..src.util import utils
-from ..src.util.PostgresConnectionHelper import PostgresConnectionHelper
 
 
 class MyTestCase(unittest.TestCase):
@@ -24,12 +21,6 @@ class MyTestCase(unittest.TestCase):
         self.assertFalse(is_result_nonempty_nullfree(res1))
         self.assertTrue(is_result_nonempty_nullfree(res2))
         self.assertFalse(is_result_nonempty_nullfree(res3))
-
-
-
-    def test_check_order(self):
-        check = check_sort_order(['-1.09', '-2.99', '-3.01'])
-        print(check)
 
     def test_pairing(self):
         elems = {1, 2, 3}
@@ -79,23 +70,6 @@ class MyTestCase(unittest.TestCase):
         maxnonNulls = set()
         maxnonNulls = utils.construct_maxNonNulls(maxnonNulls, nonNulls)
         self.assertEqual(maxnonNulls, {ab, ad, cd})
-
-    def test_oracle_connection(self):
-        conn = PostgresConnectionHelper(Config())
-        conn.config.database = "oracle"
-        conn.database = "oracle"
-        conn.config.password = "postgres"
-        conn.config.host = "HP-Z4-G4-Workstation"
-        conn.config.port = "1539"
-        conn.config.user = "TPCH"
-        conn.connectUsingParams()
-        res = conn.execute_sql_fetchall("SELECT * FROM v$version")
-        self.assertTrue(res)
-        print(res)
-        res = conn.execute_sql_fetchone_0("SELECT n_name, r_name FROM tpch.nation, tpch.region WHERE n_nationkey = 1")
-        self.assertTrue(res)
-        print(res)
-        conn.closeConnection()
 
     def test_set_of_lists(self):
         f_preds = [('lineitem', 'l_orderkey', '<=', -5000, 5000), ('orders', 'o_orderstatus', 'equal', 'F', 'F')]

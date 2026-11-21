@@ -1,4 +1,5 @@
 import re
+import time
 from _decimal import Decimal
 
 import psycopg2
@@ -48,6 +49,8 @@ class PostgresConnectionHelper(AbstractConnectionHelper):
         self.paramString = f"dbname={self.config.dbname} user={self.config.user} password={self.config.password} " \
                            f"host={self.config.host} port={self.config.port}"
         self.queries = PostgresQueries()
+        if self.config is not None:
+            self.queries.set_schema(self.config.schema)
         self.config.config_loaded = True
 
     def form_query(self, selections, wheres, schema):
@@ -93,24 +96,29 @@ class PostgresConnectionHelper(AbstractConnectionHelper):
             # finally:
             #    cur.close()
 
-    def cus_execute_sql_many(self, cur, sql, params, logger=None):
-        if not params:
-            return
-        fixed_query = sql.replace("'None'", "NULL").rstrip().rstrip(";")
-        if logger is not None:
-            logger.debug(fixed_query)
-        cur.executemany(fixed_query, params)
-
     def execute_sql_fetchall(self, sql, logger=None):
         cur = self.get_cursor()
         if logger is not None:
             logger.debug("..cur execute.." + sql)
         try:
             fixed_query = sql.replace("'None'", "NULL")
+
+            t0 = time.perf_counter()
             cur.execute(fixed_query)
-            #cur.execute(sql)
+            t_execute = time.perf_counter() - t0
+
+            t1 = time.perf_counter()
             res = cur.fetchall()
+            t_fetch = time.perf_counter() - t1
+
+            if logger is not None:
+
+                logger.debug(f"execute: {t_execute:.3f}s")
+                logger.debug(f"fetchall: {t_fetch:.3f}s")
+                logger.debug(f"rows: {len(res)}")
+
             des = cur.description
+
         except psycopg2.ProgrammingError as e:
             if logger is not None:
                 logger.error(e)

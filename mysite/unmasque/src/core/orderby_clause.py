@@ -1,11 +1,12 @@
 import copy
+import datetime
 
 import frozenlist
 
 from .dataclass.genPipeline_context import GenPipelineContext
 from ...src.core.abstract.GenerationPipeLineBase import GenerationPipeLineBase
 from ..util.constants import NON_TEXT_TYPES
-from ...src.util.constants import COUNT, NO_ORDER, SUM, ORPHAN_COLUMN
+from ...src.util.constants import COUNT, COUNT_STAR, SUM, AVG, MIN, MAX, NO_ORDER, ORPHAN_COLUMN
 from ...src.util.utils import get_unused_dummy_val, get_dummy_val_for, \
     get_val_plus_delta, get_format, get_char
 
@@ -75,6 +76,7 @@ class OrderBy(GenerationPipeLineBase):
         self.orderBy_string = ''
         self.has_orderBy = True
         self.joined_attrib_valDict = {}
+        self._candidate_value_override = {}
 
     def doExtractJob(self, query):
         # ORDERBY ON PROJECTED COLUMNS ONLY
@@ -131,6 +133,12 @@ class OrderBy(GenerationPipeLineBase):
                 if order is None or elt.name == ORPHAN_COLUMN:
                     remove_list.append(elt)
                 elif order != NO_ORDER:
+                    if self._has_aggregate_prefix() and not self._confirmed_under_hash_agg(
+                            elt, self.orderby_list, query, row_num, order):
+                        self.logger.debug(
+                            "Discard ORDER BY candidate", elt.name, order,
+                            "its direction comes from GROUP BY, not ORDER BY")
+                        continue
                     self.has_orderBy = True
                     self.orderby_list.append((elt, order))
                     curr_orderby.append(f"{elt.name} {order}")
@@ -173,9 +181,115 @@ class OrderBy(GenerationPipeLineBase):
                 break
         return is_output
 
-    def generateData(self, obj, orderby_list, query, row_num):
+    def _has_aggregate_prefix(self):
+        aggregate_names = (COUNT, COUNT_STAR, SUM, AVG, MIN, MAX)
+        for candidate, _ in self.orderby_list:
+            aggregation = candidate.aggregation
+            text = aggregation if isinstance(aggregation, str) else ' '.join(aggregation)
+            if any(name in text for name in aggregate_names):
+                return True
+        return False
+
+    @staticmethod
+    def _single_dependency(elt):
+        """Return (table, attribute) when the candidate is one plain column."""
+        deps = elt.attrib_dependency
+        if deps is None or len(deps) != 1:
+            return None
+        dep = deps[0]
+        if not isinstance(dep, (tuple, list)) or len(dep) != 2:
+            return None
+        if not all(isinstance(part, str) for part in dep):
+            return None
+        return dep[0], dep[1]
+
+    def _filter_base_value(self, tab, attrib):
+        value = self.filter_attrib_dict.get((tab, attrib))
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)) and not isinstance(value, str):
+            return value[0] if value else None
+        return value
+
+    def _candidate_value_pairs(self, tab, attrib, datatype, limit=24):
+        """Generate progressively different probe values for one column."""
+        filt = self._filter_base_value(tab, attrib)
+        if datatype == 'str':
+            return [(chr(ord('A')), chr(ord('A') + step))
+                    for step in range(1, limit + 1)]
+        if datatype == 'date':
+            base = filt if filt is not None else datetime.date(1000, 1, 1)
+            if not isinstance(base, datetime.date):
+                base = datetime.date(1000, 1, 1)
+            return [(base, base + datetime.timedelta(days=step))
+                    for step in range(1, limit + 1)]
+        if datatype == 'numeric':
+            base = filt if filt is not None else 1000.0
+            try:
+                base = float(base)
+            except (TypeError, ValueError):
+                base = 1000.0
+            return [(base, base + step) for step in range(1, limit + 1)]
+        base = filt if filt is not None else 1000
+        try:
+            base = int(base)
+        except (TypeError, ValueError):
+            base = 1000
+        return [(base, base + step) for step in range(1, limit + 1)]
+
+    def _confirmed_under_hash_agg(self, elt, orderby_list, query, row_num, order):
+        """Reject GROUP BY ordering artifacts with value-pair confirmation.
+
+        After an aggregate prefix is accepted, its value is tied in the probe
+        database.  A GROUP BY key then looks sorted in both D2 databases even
+        when the hidden query has no secondary ORDER BY on it, because the
+        aggregate emits its groups in key order.  Re-running with several
+        different value pairs under HashAggregate separates the two cases:
+
+        * no explicit secondary key: some pair makes the group order disagree
+          with the key's value order, so the probe direction flips;
+        * a real `key asc`/`key desc`: the explicit sort keeps the direction
+          stable for every pair.
+        """
+        dependency = self._single_dependency(elt)
+        if dependency is None:
+            return True
+        tab, attrib = dependency
+        datatype = self.get_datatype((tab, attrib))
+
+        # Executable.doActualJob re-enables index scans and disables seq scans
+        # for every probe.  Put the overrides after its SETs by prefixing them
+        # here, otherwise an index on the GROUP BY key can still feed a sorted
+        # GroupAggregate and the artifact survives.
+        confirmation_query = \
+            self.connectionHelper.queries.wrap_query_for_hash_aggregate_confirmation(query)
+
+        saved_override = dict(self._candidate_value_override)
+        try:
+            for pair in self._candidate_value_pairs(tab, attrib, datatype):
+                self._candidate_value_override[(tab, attrib)] = pair
+                confirmed = self.generateData(
+                    elt, orderby_list, confirmation_query, row_num,
+                    force_hash_agg=True)
+                self.logger.debug(
+                    "HashAggregate confirmation", elt.name, pair, order, confirmed)
+                if confirmed is not None and confirmed != order:
+                    self.logger.debug(
+                        "ORDER BY direction is a GROUP BY artifact for",
+                        elt.name, pair)
+                    return False
+            return True
+        finally:
+            self._candidate_value_override = saved_override
+
+    def generateData(self, obj, orderby_list, query, row_num, force_hash_agg=False):
         # check if it is a key attribute, #NO CHECKING ON KEY ATTRIBUTES
         self.logger.debug(obj.attrib)
+        saved_enable_sort = None
+        if force_hash_agg:
+            row = self.connectionHelper.execute_sql_fetchone(
+                self.connectionHelper.queries.show_configuration("enable_sort"))
+            saved_enable_sort = row[0] if row else 'on'
         key_elt = None
         if obj.attrib in self.joined_attribs:
             for elt in self.global_join_graph:
@@ -214,7 +328,11 @@ class OrderBy(GenerationPipeLineBase):
                     att_order = f"({attrib_list_str})"
                     for attrib_inner in attrib_list_inner:
                         datatype = self.get_datatype((tabname_inner, attrib_inner))
-                        if self.is_part_of_output(tabname_inner, attrib_inner):
+                        override = self._candidate_value_override.get(
+                            (tabname_inner, attrib_inner))
+                        if override is not None:
+                            first, second = override
+                        elif self.is_part_of_output(tabname_inner, attrib_inner):
                             if datatype in NON_TEXT_TYPES:
                                 first, second = self.get_non_text_attrib(datatype, attrib_inner, tabname_inner)
                             else:
@@ -245,7 +363,20 @@ class OrderBy(GenerationPipeLineBase):
 
                     self.insert_attrib_vals_into_table(att_order, attrib_list_inner, insert_rows, tabname_inner)
 
-                new_result = self.app.doJob(query)
+                if force_hash_agg:
+                    # GroupAggregate sorts on the GROUP BY key, which fakes an
+                    # ORDER BY on that key whenever the prefix is tied.  Disable
+                    # sorting so the aggregate is a HashAggregate, whose group
+                    # order is independent of the candidate's value order.
+                    self.connectionHelper.execute_sql(
+                        self.connectionHelper.queries.hash_aggregate_probe_settings())
+                try:
+                    new_result = self.app.doJob(query)
+                finally:
+                    if force_hash_agg:
+                        self.connectionHelper.execute_sql(
+                            [self.connectionHelper.queries.set_configuration(
+                                "enable_sort", saved_enable_sort)])
                 self.joined_attrib_valDict.clear()
                 self.logger.debug("New Result", k, new_result)
                 if self.app.isQ_result_empty(new_result):

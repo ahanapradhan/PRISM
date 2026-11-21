@@ -14,12 +14,17 @@ class _FakeLogger:
 class _FakeConfig:
     schema = "fresh"
     user_schema = "public"
-    database = "postgres"
 
 
 class _FakeQueries:
     def hashtext_query(self, alias, table):
         return f"hashtext({alias})"
+
+    def combine_hash_queries(self, left_query, right_query):
+        return f"select ({left_query}), ({right_query});"
+
+    def insert_values(self, table, header, value_rows):
+        return f"INSERT INTO {table}{header} VALUES {', '.join(value_rows)};"
 
 
 class _FakeConnection:
@@ -38,14 +43,13 @@ class _FakeConnection:
         return self.fetchone_result
 
 
-def _bare_result_comparator(is_hash=True, database="postgres"):
+def _bare_result_comparator(is_hash=True):
     comparator = object.__new__(ResultComparator)
     comparator.isHash = is_hash
     comparator.logger = _FakeLogger()
     comparator.r_e = "re_E"
     comparator.r_h = "rh_E"
     comparator.connectionHelper = _FakeConnection()
-    comparator.connectionHelper.config.database = database
     return comparator
 
 
@@ -93,14 +97,6 @@ class HashDiffQueryTest(unittest.TestCase):
 
         self.assertEqual((7, 7), (left, right))
         self.assertEqual(["select (hashtext(re_E)), (hashtext(rh_E));"],
-                         comparator.connectionHelper.fetchone_queries)
-
-    def test_oracle_appends_from_dual(self):
-        comparator = _bare_result_comparator(database="oracle")
-
-        comparator.run_hash_diff_queries()
-
-        self.assertEqual(["select (hashtext(re_E)), (hashtext(rh_E)) from dual;"],
                          comparator.connectionHelper.fetchone_queries)
 
     def test_no_row_returns_none_pair(self):

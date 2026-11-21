@@ -14,15 +14,26 @@ class FromClause(AppExtractorBase):
     TYPE_ERROR = "error"
     TYPE_RENAME = "rename"
 
-    def __init__(self, connectionHelper):
+    def __init__(self, connectionHelper, initiator=None):
         super().__init__(connectionHelper, "FromClause")
-        self.init = Initiator(connectionHelper)
+        self.init = initiator if initiator is not None else Initiator(connectionHelper)
 
         self.all_relations = set()
         self.core_relations = []
         self.method = self.TYPE_ERROR
         self.timeout = True
         self.check_relations = None
+        self._init_started_here = False
+
+    def doJob(self, *args):
+        # Initiator work is a separate pipeline stage. When FromClause is used on
+        # its own, setup() may still initialize the database, so remove that time
+        # from the From Clause measurement instead of attributing it here.
+        self._init_started_here = False
+        result = super().doJob(*args)
+        if self._init_started_here and self.init.local_elapsed_time is not None:
+            self.local_elapsed_time -= self.init.local_elapsed_time
+        return result
 
     def set_check_relations(self, tabs):
         self.check_relations = copy.deepcopy(tabs)
@@ -55,8 +66,7 @@ class FromClause(AppExtractorBase):
                      self.connectionHelper.queries.create_table_like(
                          self.get_original_table_name(tabname),
                          self.get_original_table_name(self._get_dirty_name(tabname)))], self.logger)
-                new_result = self.app.doJob(query)
-                if self.app.isQ_result_no_full_nullfree_row(new_result):
+                if self.app.is_query_result_no_full_nullfree_row(query):
                     self.core_relations.append(tabname)
                     self.logger.info("Table ", tabname, " is in from clause..")
             except Exception as error:
@@ -69,6 +79,7 @@ class FromClause(AppExtractorBase):
                      self.connectionHelper.queries.alter_table_rename_to(
                          self.get_original_table_name(self._get_dirty_name(tabname)), tabname)], self.logger)
                 """
+        return self.core_relations
 
     def get_core_relations_by_error(self, query):
         for tabname in self.all_relations:
@@ -109,12 +120,11 @@ class FromClause(AppExtractorBase):
         self.set_app_type()
         check = self.init.result
         if not self.init.done:
+            self._init_started_here = True
             check = self.init.doJob(query)
         if not check:
             return False
         self.all_relations = self.init.all_relations
-        # self.local_start_time = self.init.local_end_time
-        # still in union pipeline from clause timins include initiator timings. Find out why.
         return True
 
     def doActualJob(self, args=None):
@@ -123,17 +133,26 @@ class FromClause(AppExtractorBase):
         setup_done = self.setup(query)
         if not setup_done:
             return False
-        print(f"Start from {str(datetime.datetime.now().time())}")
+        # print(f"Start from {str(datetime.datetime.now().time())}")
         query, method = self.extract_params_from_args(args)
+        # TYPE_RENAME is passed explicitly by UnionFromClause.get_comTabs() to
+        # detect common tables. There, an empty result means "no common table",
+        # which is a valid answer and must not become ERROR_006 / the OK string.
+        is_common_table_check = bool(method) and method == self.TYPE_RENAME
         if not method:
             method = self.method
         self.core_relations = []
         if method == self.TYPE_RENAME:
-            self.get_core_relations_by_void(query)
+            self.core_relations = self.get_core_relations_by_void(query)
         else:
             self.get_core_relations_by_error(query)
-        if len(self.core_relations) == 0:
+        if len(self.core_relations) == 0 and not is_common_table_check:
             raise UnmasqueError(ERROR_006, "from_clause", {})
+        # The probing above renames tables inside the user schema and always
+        # rolls the transaction back. Only after it has completed do we create
+        # working-schema backups, and only for the core relations that were
+        # actually identified. This keeps the backup minimal and guarantees the
+        # user schema is never used as a scratch area by mistake.
         return self.core_relations
 
     def get_key_lists(self):
