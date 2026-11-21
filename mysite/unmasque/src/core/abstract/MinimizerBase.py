@@ -26,6 +26,9 @@ class Minimizer(AppExtractorBase, ABC):
         self.iteration = 0
         self.on_iteration = None
         self._iteration_hooked = False
+        self.repeats = 1
+        self.timing_records = []
+        self._probe_measured = False
 
     def getCoreSizes(self):
         sizes = {}

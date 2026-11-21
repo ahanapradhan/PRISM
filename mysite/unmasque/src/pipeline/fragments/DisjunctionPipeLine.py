@@ -8,7 +8,7 @@ from ....src.core.cs2 import Cs2
 from ....src.core.db_restorer import DbRestorer
 from ....src.core.equi_join import U2EquiJoin
 from ....src.core.filter import Filter
-from ....src.core.view_minimizer import ViewMinimizer
+from ....src.core.minimizer_factory import create_minimizer
 from ....src.pipeline.abstract.generic_pipeline import GenericPipeLine
 from ....src.util.aoa_utils import get_constants_for
 from ....src.util.constants import FILTER, INEQUALITY, DONE, RUNNING, START, EQUALITY, DB_MINIMIZATION, \
@@ -114,8 +114,8 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
             View based Database Minimization
             """
         self.update_state(DB_MINIMIZATION + START)
-        vm = ViewMinimizer(self.connectionHelper, core_relations, self.db_restorer.last_restored_size, cs2.passed,
-                           expect_populated=expect_populated)
+        vm = create_minimizer(self.connectionHelper, core_relations, self.db_restorer.last_restored_size, cs2.passed,
+                              expect_populated=expect_populated)
         self.update_state(DB_MINIMIZATION + RUNNING)
         try:
             check = vm.doJob(query)

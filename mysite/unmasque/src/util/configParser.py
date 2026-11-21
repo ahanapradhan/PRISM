@@ -49,6 +49,8 @@ class Config:
         self.disjunction_max_iters = 10000
         self.disjunction_max_routes = 128
         self.disjunction_diagnostics = True
+        # Minimizer selection: view (default), copy, pk, hybrid.
+        self.minimizer = "view"
         self.app_type = ApplicationType.SQL_ERR_FWD
         self.database = "postgres"
         self.table_sizes_dict = {}
@@ -142,6 +144,22 @@ class Config:
             self.disjunction_diagnostics = str(diag).lower() not in ("no", "false", "0", "off")
         except Exception:
             self.disjunction_diagnostics = True
+        try:
+            minimizer = str(config_object.get(FEATURE_SECTION, "minimizer", fallback=self.minimizer)).lower().strip()
+            aliases = {
+                "view": "view",
+                "view_minimizer": "view",
+                "copy": "copy",
+                "copy_based": "copy",
+                "copybased": "copy",
+                "pk": "pk",
+                "pk_view": "pk",
+                "pkview": "pk",
+                "hybrid": "hybrid",
+            }
+            self.minimizer = aliases.get(minimizer, "view")
+        except Exception:
+            self.minimizer = "view"
 
         detect_oj = config_object.get(FEATURE_SECTION, DETECT_OJ)
         if detect_oj.lower() == "no":
