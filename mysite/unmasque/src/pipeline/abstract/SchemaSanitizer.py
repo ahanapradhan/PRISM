@@ -216,10 +216,68 @@ class SchemaSanitizer:
         tab_attribs = [row[0].lower() for row in res]
         return tab_attribs
 
-    def __create_tab_indexes(self, tab):
+    def __create_tab_indexes(self, tab, parallel=True):
         cols = self.__get_cols_for_table(tab)
+        if not cols:
+            return
+        if not parallel or len(cols) == 1:
+            for col in cols:
+                self.__create_col_idx_if_not_exists(tab, col)
+            return
+        import threading
+        from ...util.PostgresConnectionHelper import PostgresConnectionHelper
+        errors = []
+        lock = threading.Lock()
+
+        def worker(col):
+            helper = None
+            try:
+                helper = PostgresConnectionHelper(self.connectionHelper.config)
+                helper.connectUsingParams()
+                idx = f"{tab}_{col}_idx"
+                sql = f"""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1
+                                FROM pg_index i
+                                    JOIN pg_attribute a ON a.attrelid = i.indrelid
+                                  AND a.attnum = ANY(i.indkey)
+                                    WHERE i.indrelid = '{tab}'::regclass
+                                    AND a.attname = '{col}'
+                        ) THEN
+                            EXECUTE 'CREATE INDEX {idx} ON {tab} ({col})';
+                        END IF;
+                    END$$;
+                    """
+                helper.execute_sql([sql], self.logger)
+                helper.commit_transaction()
+            except Exception as exc:
+                with lock:
+                    errors.append((col, str(exc)))
+            finally:
+                if helper is not None:
+                    try:
+                        helper.closeConnection()
+                    except Exception:
+                        pass
+
+        threads = []
+        max_workers = min(8, len(cols))
         for col in cols:
-            self.__create_col_idx_if_not_exists(tab, col)
+            t = threading.Thread(target=worker, args=(col,))
+            t.start()
+            threads.append(t)
+            if len(threads) >= max_workers:
+                for th in threads:
+                    th.join()
+                threads = []
+                if errors:
+                    break
+        for th in threads:
+            th.join()
+        if errors:
+            self.logger.error(f"Index build errors for {tab}: {errors[:3]}")
 
     def _backup_serial(self, table):
         self.connectionHelper.begin_transaction()
