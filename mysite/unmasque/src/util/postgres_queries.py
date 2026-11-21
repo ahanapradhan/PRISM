@@ -9,9 +9,17 @@ class PostgresQueries(CommonQueries):
     def _create_table(self, tab, definition, if_not_exists=False):
         """Build a CREATE TABLE statement, unlogged for working-schema tables."""
         schema = self.schema or WORKING_SCHEMA
-        table_kind = "unlogged table" if str(tab).startswith(f"{schema}.") else "table"
+        is_working = str(tab).startswith(f"{schema}.")
+        table_kind = "unlogged table" if is_working else "table"
         exists = " if not exists" if if_not_exists else ""
-        return f"Create {table_kind}{exists} {tab} {definition}; "
+        defn = definition.strip()
+        if is_working:
+            # Autovacuum only when explicitly triggered from code.
+            if defn.lower().startswith("as "):
+                defn = f"WITH (autovacuum_enabled=false) {defn}"
+            else:
+                defn = f"{defn} WITH (autovacuum_enabled=false)"
+        return f"Create {table_kind}{exists} {tab} {defn}; "
 
     def create_table_as_select_star_from_where(self, tab, fromtab, where):
         return self._create_table(tab, f"as (Select * from {fromtab} where {where})")
@@ -255,10 +263,10 @@ class PostgresQueries(CommonQueries):
             "END IF; END $$;")
 
     def create_unlogged_table_as_query(self, table, query):
-        return f"create unlogged table {table} as {query};"
+        return f"create unlogged table {table} WITH (autovacuum_enabled=false) as {query};"
 
     def create_unlogged_table_like(self, table, like_table):
-        return f"create unlogged table {table} (like {like_table});"
+        return f"create unlogged table {table} (like {like_table}) WITH (autovacuum_enabled=false);"
 
     def insert_into_table_select_columns_from_query(self, table, columns, query):
         return f"insert into {table} ({columns}) select {columns} from ({query}) as q;"

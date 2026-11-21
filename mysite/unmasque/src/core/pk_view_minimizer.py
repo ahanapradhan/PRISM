@@ -130,7 +130,7 @@ class PKViewMinimizer(ViewMinimizer):
 
         self.connectionHelper.execute_sql([
             self.connectionHelper.queries.drop_view(fq_tab),
-            f"CREATE UNLOGGED TABLE {fq_tab} AS SELECT * FROM {fq_dirty} WHERE {pred};",
+            f"CREATE UNLOGGED TABLE {fq_tab} WITH (autovacuum_enabled=false) AS SELECT * FROM {fq_dirty} WHERE {pred};",
             self.connectionHelper.queries.drop_table_cascade(fq_dirty)], self.logger)
         remaining = int(self.connectionHelper.execute_sql_fetchone_0(
             self.connectionHelper.queries.get_row_count(fq_tab), self.logger) or 0)
