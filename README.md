@@ -188,6 +188,8 @@ constant   ::= number | date | string
 
 > `HAVING` support is added within the flat scope. It is not integrated with the newer PRISM features.
 
+> **Note (Spurious ORDER BY):** When a query has an `ORDER BY` prefix whose values are tied in the probe database, rows tied under that prefix have no SQL-defined order unless the hidden query specifies additional `ORDER BY` keys. In this case, OrderBy may occasionally infer a spurious secondary `ORDER BY` column if the observed tied-prefix row order appears stable across its probes. This is a black-box ambiguity: without inspecting the query, accidental physical/plan ordering among tied-prefix rows can be indistinguishable from a true secondary `ORDER BY`.
+
 ---
 
 ## Observability Conditions
