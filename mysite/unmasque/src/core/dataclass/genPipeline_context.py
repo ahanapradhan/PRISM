@@ -247,7 +247,8 @@ class GenPipelineContext:
         self.attrib_types_dict = {(entry[0], entry[1]): entry[2] for entry in self.global_attrib_types}
         self.filter_attrib_dict = self.__construct_filter_attribs_dict()
         self.joined_attribs = collect_attribs_from(self.global_join_graph)
-        self.__aoa_attribs = collect_attribs_from(self.global_aoa_le_predicates)
+        self.__aoa_attribs = (collect_attribs_from(self.global_aoa_le_predicates)
+                              + collect_attribs_from(self.global_aoa_l_predicates))
         self.__update_filter_predicates_from_filter_dict()
 
     def __create_equi_join_graph(self):
@@ -335,6 +336,7 @@ class GenPipelineContext:
 
         to_add = set()
         cross_keys = getattr(self, '_cross_column_or_constituent_keys', set()) or set()
+        aoa_keys = set(getattr(self, '_GenPipelineContext__aoa_attribs', None) or [])
         for key in list(self.filter_attrib_dict.keys()):
             if not isinstance(key, tuple) or len(key) != 2:
                 continue
@@ -343,6 +345,9 @@ class GenPipelineContext:
             # Do not synthesize standalone conjuncts for attributes participating in
             # discovered cross-column OR clauses (disjunctive, not standalone).
             if key in cross_keys:
+                continue
+            # Do not synthesize filters for purely AOA-implied bounds (no concrete filter).
+            if key in aoa_keys:
                 continue
             val = self.filter_attrib_dict[key]
             try:
