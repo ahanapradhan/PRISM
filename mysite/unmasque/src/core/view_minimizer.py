@@ -24,8 +24,9 @@ class ViewMinimizer(Minimizer):
     def __init__(self, connectionHelper,
                  core_relations, all_sizes,
                  sampling_status,
-                 expect_populated=True):
-        super().__init__(connectionHelper, core_relations, all_sizes, "View_Minimizer")
+                 expect_populated=True,
+                 name="View_Minimizer"):
+        super().__init__(connectionHelper, core_relations, all_sizes, name)
         self.cs2_passed = sampling_status
         self.global_min_instance_dict = {}
         # False means this minimizer is running against a deliberately

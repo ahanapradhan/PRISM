@@ -20,6 +20,12 @@ class Minimizer(AppExtractorBase, ABC):
         self.all_relations = list(all_sizes.keys())
         self.all_relations.sort()
         self.error_table = None
+        # Experiment hooks: one "iteration" is one ctid-halving round.  The
+        # marker line lets timing/cost values be recovered from the log after
+        # the run, which is how the comparison plots are produced.
+        self.iteration = 0
+        self.on_iteration = None
+        self._iteration_hooked = False
 
     def getCoreSizes(self):
         sizes = {}
@@ -52,6 +58,9 @@ class Minimizer(AppExtractorBase, ABC):
                                           start_ctid,
                                           tabname,
                                           dirty_tab):
+        self.iteration += 1
+        self._iteration_hooked = False
+        self.logger.debug(f"MIN_ITER_START: {self.iteration} {tabname}")
         if isinstance(self.app, NullFreeExecutable):
             end_ctid, start_ctid = self.check_sanity_when_nullfree_exe(end_ctid, mid_ctid1, mid_ctid2, query,
                                                                        start_ctid,
@@ -62,6 +71,7 @@ class Minimizer(AppExtractorBase, ABC):
                                                                    tabname, dirty_tab)
         self.connectionHelper.execute_sql([self.connectionHelper.queries.drop_view(
                                                     self.get_fully_qualified_table_name(tabname))])
+        self.logger.debug(f"MIN_ITER_END: {self.iteration}")
         return end_ctid, start_ctid
 
     def check_sanity_when_nullfree_exe(self, end_ctid, mid_ctid1, mid_ctid2, query, start_ctid, tabname, dirty_tab):
@@ -144,11 +154,18 @@ class Minimizer(AppExtractorBase, ABC):
         page = int(m_ctid2[0])
         return page, row
 
+    def _notify_iteration(self, view, query):
+        """Expose the candidate relation once it exists (for cost probes)."""
+        if self.on_iteration is not None and not self._iteration_hooked:
+            self._iteration_hooked = True
+            self.on_iteration(self.iteration, view, query)
+
     def check_result_for_half(self, start_ctid, end_ctid, tab, view, query):
         self.connectionHelper.execute_sql(
             [self.connectionHelper.queries.create_view_as_select_star_where_ctid(end_ctid, start_ctid,
                         self.get_fully_qualified_table_name(view), self.get_fully_qualified_table_name(tab))],
             self.logger)
+        self._notify_iteration(view, query)
         works = not self.app.is_query_result_no_full_nullfree_row(query)
         self.connectionHelper.execute_sql([self.connectionHelper.queries.drop_view(
                                                     self.get_fully_qualified_table_name(view))], self.logger)

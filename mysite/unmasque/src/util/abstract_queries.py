@@ -18,6 +18,18 @@ class CommonQueries(ABC):
         pass
 
     @abstractmethod
+    def analyze_table(self, tab):
+        pass
+
+    @abstractmethod
+    def drop_schema(self, schema):
+        pass
+
+    @abstractmethod
+    def create_schema(self, schema):
+        pass
+
+    @abstractmethod
     def drop_table(self, tab):
         pass
 
@@ -69,6 +81,10 @@ class CommonQueries(ABC):
 
     @abstractmethod
     def get_min_max_ctid(self, tab):
+        pass
+
+    @abstractmethod
+    def select_rows_by_ctid_order(self, tab, limit):
         pass
 
     @abstractmethod
@@ -158,6 +174,10 @@ class CommonQueries(ABC):
 
     @abstractmethod
     def insert_into_tab_select_star_fromtab_with_ctid(self, tab, fromtab, ctid):
+        pass
+
+    @abstractmethod
+    def insert_into_tab_select_star_from_ctid_range(self, tab, fromtab, start_ctid, end_ctid=None):
         pass
 
     @abstractmethod
