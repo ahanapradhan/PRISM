@@ -58,6 +58,52 @@ def beautify_scalar_func(final_res, local_symbol_list, deps):
         res_expr = collect(res_expr, a, distribute_order_term=False)
     return nsimplify(res_expr)
 
+
+def _is_range_interval_value(val):
+    if not isinstance(val, (tuple, list)) or isinstance(val, (str, bytes)) or len(val) != 2:
+        return False
+    lo, hi = val[0], val[1]
+    if lo is None or hi is None:
+        return False
+    numeric = (int, float)
+    try:
+        import decimal
+        numeric = (int, float, decimal.Decimal)
+    except Exception:
+        pass
+    if isinstance(lo, bool) or isinstance(hi, bool):
+        return False
+    # treat as range pair when both look like bounds (numeric/date-like)
+    if isinstance(lo, numeric) and isinstance(hi, numeric):
+        return True
+    try:
+        # date/datetime bounds
+        if hasattr(lo, 'year') and hasattr(hi, 'year'):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _scalar_from_range_interval(val):
+    lo, hi = val[0], val[1]
+    try:
+        if lo == hi:
+            return lo
+        # midpoint for probe value
+        mid = lo + (hi - lo) / 2
+        # prefer integer midpoint when bounds are integral
+        if isinstance(lo, int) and isinstance(hi, int) and not isinstance(lo, bool) and not isinstance(hi, bool):
+            try:
+                imid = int(mid)
+                if lo <= imid <= hi:
+                    return imid
+            except Exception:
+                pass
+        return mid
+    except Exception:
+        return lo
+
 class Projection(GenerationPipeLineBase):
     def __init__(self, connectionHelper: AbstractConnectionHelper, genPipelineCtx: GenPipelineContext):
         super().__init__(connectionHelper, "Projection", genPipelineCtx)
@@ -203,6 +249,11 @@ class Projection(GenerationPipeLineBase):
             s_value_dict[other_attrib] = val
         return val, keys_to_skip
 
+    def _scalar_probe_value(self, val):
+        if _is_range_interval_value(val):
+            return _scalar_from_range_interval(val)
+        return val
+
     def check_impact_of_single_attrib(self, attrib, new_result, projection_dep, query, tabname):
         for fe in self.global_filter_predicates:
             if fe[1] == attrib and (fe[2] == 'equal' or fe[2] == '=') and fe[1] not in self.joined_attribs:
@@ -217,14 +268,17 @@ class Projection(GenerationPipeLineBase):
                 self.connectionHelper.queries.select_attribs_from_relation([attrib],
                                                                             self.get_fully_qualified_table_name(tabname)))
             alt = None
+            alt_src = None
             for v in in_vals:
-                if str(v) != str(prev):
-                    alt = v
+                sv = self._scalar_probe_value(v)
+                if str(sv) != str(prev):
+                    alt = sv
+                    alt_src = v
                     break
             if alt is None:
                 self.logger.debug("Could not find alternative IN value! Cannot verify impact!")
                 return
-            self.logger.debug(f"update {tabname}.{attrib} with IN alternative {alt} that had previous value {prev}")
+            self.logger.debug(f"update {tabname}.{attrib} with IN alternative {alt_src if alt_src is not None else alt} that had previous value {prev}")
             self.update_with_val(attrib, tabname, alt)
             new_result1 = self.app.doJob(query)
             self.update_with_val(attrib, tabname, prev)
@@ -263,22 +317,26 @@ class Projection(GenerationPipeLineBase):
                 pass
             if prev is not None:
                 fallback.insert(0, prev)
-            candidates = self.get_cnf_distinct_values(key, count=4, route=self.cnf_route, fallback=fallback)
+            candidates = list(self.get_cnf_distinct_values(key, count=4, route=self.cnf_route, fallback=fallback))
             # legacy IN values can still help when domain sampling is coarse
             if key in self.or_predicates_dict:
                 for v in list(self.or_predicates_dict[key]):
-                    if v not in candidates:
-                        candidates.append(v)
+                    sv = self._scalar_probe_value(v)
+                    if sv not in candidates:
+                        candidates.append(sv)
             alt = None
             for v in candidates:
-                if prev is None or str(v) != str(prev):
-                    alt = v
+                sv = self._scalar_probe_value(v)
+                if prev is None or str(sv) != str(prev):
+                    alt = sv
                     break
             if alt is None:
                 try:
                     alt = self.get_different_s_val(attrib, tabname, prev)
                 except Exception:
                     alt = None
+            if alt is not None:
+                alt = self._scalar_probe_value(alt)
             if alt is None or (prev is not None and str(alt) == str(prev)):
                 self.logger.debug(f"Could not find alternative CNF/route value for {tabname}.{attrib}")
                 return None
@@ -461,9 +519,10 @@ class Projection(GenerationPipeLineBase):
     def __assign_next_s_value_for_or_attrib(self, used_vals, tab_attrib):
         in_vals = self.or_predicates_dict[tab_attrib]
         for val in in_vals:
-            if in_vals not in used_vals:
-                used_vals.append(val)
-                return val
+            sv = self._scalar_probe_value(val)
+            if not any(str(sv) == str(u) for u in used_vals):
+                used_vals.append(sv)
+                return sv
         self.logger.error("Insufficient s-value options!")
         return None
 
@@ -489,6 +548,7 @@ class Projection(GenerationPipeLineBase):
         if s_val is None:
             self.logger.debug(f"mini: {mini}, maxi: {maxi}")
             s_val = random.randrange(math.floor(mini), math.ceil(maxi))
+        s_val = self._scalar_probe_value(s_val)
         self.logger.debug(f"s-value for {key} is {s_val}, assigned to coeff[{outer_idx}][{j}]")
         coeff[outer_idx][j] = s_val
 
@@ -651,17 +711,20 @@ class Projection(GenerationPipeLineBase):
         except Exception:
             pass
         try:
-            candidates = self.get_cnf_distinct_values(key, count=max(4, outer_idx + 2), route=self.cnf_route, fallback=fallback)
+            candidates = list(self.get_cnf_distinct_values(key, count=max(4, outer_idx + 2), route=self.cnf_route, fallback=fallback))
         except Exception:
             candidates = list(fallback)
+        candidates = [self._scalar_probe_value(v) for v in candidates]
         if key in self.or_predicates_dict:
             for v in list(self.or_predicates_dict[key]):
-                if v not in candidates:
-                    candidates.append(v)
+                sv = self._scalar_probe_value(v)
+                if not any(str(sv) == str(c) for c in candidates):
+                    candidates.append(sv)
         for v in candidates:
-            if not any(str(v) == str(u) for u in used):
-                return v
-        return candidates[0] if candidates else None
+            sv = self._scalar_probe_value(v)
+            if not any(str(sv) == str(u) for u in used):
+                return sv
+        return self._scalar_probe_value(candidates[0]) if candidates else None
 
 
 def get_param_values_external(coeff_arr):
