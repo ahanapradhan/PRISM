@@ -1,0 +1,242 @@
+minimizer,run,iteration,table,total_cost,limit_cost,scan_node,scan_cost,scan_rows
+CopyBasedMinimizer,1,1,partsupp,17729.2,17729.2,Seq Scan,11010.36,166636
+CopyBasedMinimizer,1,2,partsupp,11911.3,11911.3,Seq Scan,5504.95,83295
+CopyBasedMinimizer,1,3,partsupp,9279.5,9279.5,Seq Scan,2955.21,58721
+CopyBasedMinimizer,1,4,partsupp,6226.31,6226.31,Seq Scan,1508.83,29283
+CopyBasedMinimizer,1,5,partsupp,4075.56,4075.56,Seq Scan,888.81,24881
+CopyBasedMinimizer,1,6,partsupp,2733.13,2733.13,Seq Scan,444.57,12457
+CopyBasedMinimizer,1,7,partsupp,2406.1,2406.1,Seq Scan,254.15,6215
+CopyBasedMinimizer,1,8,partsupp,2025.2,2025.2,Seq Scan,158.87,3087
+CopyBasedMinimizer,1,9,partsupp,1840.26,1840.26,Seq Scan,79.53,1553
+CopyBasedMinimizer,1,10,partsupp,2295.03,2295.03,Seq Scan,40.22,822
+CopyBasedMinimizer,1,11,partsupp,3731.16,3731.16,Seq Scan,19.45,345
+CopyBasedMinimizer,1,12,partsupp,5111.6,5111.6,Seq Scan,10.16,216
+CopyBasedMinimizer,1,13,partsupp,4727.63,4727.63,Seq Scan,5.28,128
+CopyBasedMinimizer,1,14,partsupp,3936.6,3936.6,Seq Scan,1.43,43
+CopyBasedMinimizer,1,15,partsupp,3655.08,3655.08,Seq Scan,1.23,23
+CopyBasedMinimizer,1,16,partsupp,3388.97,3388.97,Seq Scan,1.11,11
+CopyBasedMinimizer,1,17,partsupp,3315.08,3315.08,Seq Scan,1.06,6
+CopyBasedMinimizer,1,18,partsupp,2015.48,2015.48,Seq Scan,1.03,3
+CopyBasedMinimizer,1,19,partsupp,2164.62,2164.62,Seq Scan,1.02,2
+CopyBasedMinimizer,1,20,partsupp,2337.71,2337.71,Seq Scan,1.01,1
+CopyBasedMinimizer,1,21,part,3462.56,3462.56,Seq Scan,3419.64,364
+CopyBasedMinimizer,1,22,part,1724.2,1724.2,Seq Scan,1709.89,186
+CopyBasedMinimizer,1,23,part,900.03,900.03,Seq Scan,886.97,87
+CopyBasedMinimizer,1,24,part,455.85,455.85,Seq Scan,443.31,46
+CopyBasedMinimizer,1,25,part,234.13,234.13,Seq Scan,221.84,25
+CopyBasedMinimizer,1,26,part,121.07,121.07,Seq Scan,110.74,12
+CopyBasedMinimizer,1,27,part,66.24,66.24,Seq Scan,55.59,5
+CopyBasedMinimizer,1,28,part,38.0,38.0,Seq Scan,27.8,4
+CopyBasedMinimizer,1,29,part,24.46,24.46,Seq Scan,14.29,2
+CopyBasedMinimizer,1,30,part,16.84,16.84,Seq Scan,6.69,1
+CopyBasedMinimizer,1,31,part,13.73,13.73,Seq Scan,3.58,1
+CopyBasedMinimizer,1,32,part,11.94,11.94,Seq Scan,1.78,1
+CopyBasedMinimizer,1,33,part,11.56,11.56,Seq Scan,1.41,1
+CopyBasedMinimizer,1,34,part,11.35,11.35,Seq Scan,1.2,1
+CopyBasedMinimizer,1,35,part,11.26,11.26,Seq Scan,1.1,1
+CopyBasedMinimizer,1,36,part,11.2,11.2,Seq Scan,1.04,1
+CopyBasedMinimizer,1,37,part,11.19,11.19,Seq Scan,1.03,1
+CopyBasedMinimizer,1,38,supplier,201.48,201.48,Seq Scan,178.01,5001
+CopyBasedMinimizer,1,39,supplier,101.28,101.28,Seq Scan,88.7,2470
+CopyBasedMinimizer,1,40,supplier,53.05,53.05,Seq Scan,44.89,1289
+CopyBasedMinimizer,1,41,supplier,27.77,27.77,Seq Scan,22.45,645
+CopyBasedMinimizer,1,42,supplier,15.33,15.33,Seq Scan,11.21,321
+CopyBasedMinimizer,1,43,supplier,9.48,9.48,Seq Scan,5.84,184
+CopyBasedMinimizer,1,44,supplier,6.28,6.28,Seq Scan,2.92,92
+CopyBasedMinimizer,1,45,supplier,4.78,4.78,Seq Scan,1.47,47
+CopyBasedMinimizer,1,46,supplier,4.72,4.72,Seq Scan,1.23,23
+CopyBasedMinimizer,1,47,supplier,5.05,5.05,Seq Scan,1.12,12
+CopyBasedMinimizer,1,48,supplier,5.17,5.17,Seq Scan,1.06,6
+CopyBasedMinimizer,1,49,supplier,5.17,5.17,Seq Scan,1.03,3
+CopyBasedMinimizer,1,50,supplier,5.13,5.13,Seq Scan,1.02,2
+CopyBasedMinimizer,1,51,supplier,5.08,5.08,Seq Scan,1.01,1
+CopyBasedMinimizer,1,52,nation,5.35,5.35,Seq Scan,1.13,13
+CopyBasedMinimizer,1,53,nation,5.31,5.31,Seq Scan,1.07,7
+CopyBasedMinimizer,1,54,nation,5.22,5.22,Seq Scan,1.03,3
+CopyBasedMinimizer,1,55,nation,5.2,5.2,Seq Scan,1.02,2
+CopyBasedMinimizer,1,56,nation,5.17,5.17,Seq Scan,1.01,1
+CopyBasedMinimizer,1,57,region,5.15,5.15,Seq Scan,1.04,1
+CopyBasedMinimizer,1,58,region,5.12,5.12,Seq Scan,1.01,1
+ViewMinimizer,1,1,partsupp,12593.04,12583.29,Index Scan,98.15,2000
+ViewMinimizer,1,2,partsupp,11804.13,11799.38,Index Scan,98.15,1000
+ViewMinimizer,1,3,partsupp,9944.69,9942.44,Tid Range Scan,3335.5,100050
+ViewMinimizer,1,4,partsupp,8029.42,8028.42,Tid Range Scan,1670.57,50057
+ViewMinimizer,1,5,partsupp,7070.99,7070.61,Tid Range Scan,837.39,25039
+ViewMinimizer,1,6,partsupp,6592.2,6592.13,Tid Range Scan,421.51,12551
+ViewMinimizer,1,7,partsupp,6409.96,6409.96,Tid Range Scan,212.86,6286
+ViewMinimizer,1,8,partsupp,6260.82,6260.82,Tid Range Scan,108.54,3153
+ViewMinimizer,1,9,partsupp,6187.43,6187.43,Tid Range Scan,57.09,1608
+ViewMinimizer,1,10,partsupp,6148.02,6148.02,Tid Range Scan,29.73,772
+ViewMinimizer,1,11,partsupp,6121.43,6121.43,Tid Range Scan,16.87,386
+ViewMinimizer,1,12,partsupp,5537.48,5537.48,Tid Range Scan,11.15,215
+ViewMinimizer,1,13,partsupp,4457.57,4457.57,Tid Range Scan,6.86,86
+ViewMinimizer,1,14,partsupp,3940.65,3940.65,Tid Range Scan,5.43,43
+ViewMinimizer,1,15,partsupp,2338.47,2338.47,,,
+ViewMinimizer,1,16,partsupp,2338.16,2338.16,,,
+ViewMinimizer,1,17,partsupp,2338.01,2338.01,,,
+ViewMinimizer,1,18,partsupp,2337.93,2337.93,,,
+ViewMinimizer,1,19,partsupp,2337.9,2337.9,,,
+ViewMinimizer,1,20,part,2342.87,2342.87,Bitmap Heap Scan,2304.5,1
+ViewMinimizer,1,21,part,1747.86,1747.86,Tid Range Scan,1709.48,2
+ViewMinimizer,1,22,part,896.2,896.2,Tid Range Scan,857.82,1
+ViewMinimizer,1,23,part,469.48,469.48,Tid Range Scan,431.1,1
+ViewMinimizer,1,24,part,257.01,257.01,Tid Range Scan,218.64,1
+ViewMinimizer,1,25,part,149.88,149.88,Tid Range Scan,111.51,1
+ViewMinimizer,1,26,part,96.32,96.32,Tid Range Scan,57.95,1
+ViewMinimizer,1,27,part,69.54,69.54,Tid Range Scan,31.16,1
+ViewMinimizer,1,28,part,57.04,57.04,Tid Range Scan,18.67,1
+ViewMinimizer,1,29,part,49.9,49.9,Tid Range Scan,11.52,1
+ViewMinimizer,1,30,part,45.95,45.95,Tid Range Scan,7.58,1
+ViewMinimizer,1,31,part,44.16,44.16,Tid Range Scan,5.79,1
+ViewMinimizer,1,32,part,41.02,41.02,,,
+ViewMinimizer,1,33,part,39.48,39.48,,,
+ViewMinimizer,1,34,part,39.22,39.22,,,
+ViewMinimizer,1,35,part,39.1,39.1,,,
+ViewMinimizer,1,36,part,39.04,39.04,,,
+ViewMinimizer,1,37,part,39.0,39.0,,,
+ViewMinimizer,1,38,supplier,39.07,39.07,Bitmap Heap Scan,33.83,25
+ViewMinimizer,1,39,supplier,38.79,38.79,Bitmap Heap Scan,33.82,13
+ViewMinimizer,1,40,supplier,38.66,38.66,Bitmap Heap Scan,33.82,7
+ViewMinimizer,1,41,supplier,30.1,30.1,Tid Range Scan,24.41,641
+ViewMinimizer,1,42,supplier,18.54,18.54,Tid Range Scan,14.21,320
+ViewMinimizer,1,43,supplier,13.47,13.47,Tid Range Scan,9.84,183
+ViewMinimizer,1,44,supplier,10.28,10.28,Tid Range Scan,6.92,92
+ViewMinimizer,1,45,supplier,8.78,8.78,Tid Range Scan,5.46,46
+ViewMinimizer,1,46,supplier,5.15,5.15,,,
+ViewMinimizer,1,47,supplier,5.14,5.14,,,
+ViewMinimizer,1,48,supplier,5.14,5.14,,,
+ViewMinimizer,1,49,supplier,5.14,5.14,,,
+ViewMinimizer,1,50,supplier,5.12,5.12,,,
+ViewMinimizer,1,51,nation,5.54,5.54,,,
+ViewMinimizer,1,52,nation,5.36,5.36,,,
+ViewMinimizer,1,53,nation,5.25,5.25,,,
+ViewMinimizer,1,54,nation,5.21,5.21,,,
+ViewMinimizer,1,55,nation,5.19,5.19,,,
+ViewMinimizer,1,56,region,5.2,5.2,,,
+ViewMinimizer,1,57,region,5.15,5.15,,,
+PKViewMinimizer,1,1,partsupp,11336.3,11088.71,Bitmap Heap Scan,32.23,7
+PKViewMinimizer,1,2,partsupp,11341.55,11093.96,Bitmap Heap Scan,32.26,7
+PKViewMinimizer,1,3,partsupp,11394.45,11146.87,Index Only Scan,32.62,7
+PKViewMinimizer,1,4,partsupp,11397.08,11149.49,Index Only Scan,32.63,7
+PKViewMinimizer,1,5,partsupp,11399.7,11152.12,Index Only Scan,32.65,7
+PKViewMinimizer,1,6,partsupp,11402.33,11154.74,Index Only Scan,32.67,7
+PKViewMinimizer,1,7,partsupp,11404.95,11157.37,Index Only Scan,32.69,7
+PKViewMinimizer,1,8,partsupp,11407.58,11159.99,Index Only Scan,32.7,7
+PKViewMinimizer,1,9,partsupp,11410.2,11162.62,Index Only Scan,32.72,7
+PKViewMinimizer,1,10,partsupp,6363.61,6363.61,Bitmap Heap Scan,83.86,20
+PKViewMinimizer,1,11,partsupp,6363.91,6363.91,Bitmap Heap Scan,83.96,20
+PKViewMinimizer,1,12,partsupp,6364.21,6364.21,Bitmap Heap Scan,84.06,20
+PKViewMinimizer,1,13,partsupp,6364.51,6364.51,Bitmap Heap Scan,84.16,20
+PKViewMinimizer,1,14,partsupp,6364.81,6364.81,Bitmap Heap Scan,84.26,20
+PKViewMinimizer,1,15,partsupp,6365.11,6365.11,Bitmap Heap Scan,84.36,20
+PKViewMinimizer,1,16,partsupp,6365.41,6365.41,Bitmap Heap Scan,84.46,20
+PKViewMinimizer,1,17,partsupp,6365.71,6365.71,Bitmap Heap Scan,84.56,20
+PKViewMinimizer,1,18,partsupp,6366.01,6366.01,Bitmap Heap Scan,84.66,20
+PKViewMinimizer,1,19,partsupp,6206.67,6206.67,Index Only Scan,32.88,7
+PKViewMinimizer,1,20,partsupp,6206.73,6206.73,Index Only Scan,32.9,7
+PKViewMinimizer,1,21,partsupp,3789.9,3789.9,Index Only Scan,374.62,20
+PKViewMinimizer,1,22,partsupp,3799.9,3799.9,Index Only Scan,384.62,20
+PKViewMinimizer,1,23,partsupp,3809.9,3809.9,Index Only Scan,394.62,20
+PKViewMinimizer,1,24,partsupp,3819.9,3819.9,Index Only Scan,404.62,20
+PKViewMinimizer,1,25,partsupp,3829.9,3829.9,Index Only Scan,414.62,20
+PKViewMinimizer,1,26,partsupp,3839.9,3839.9,Index Only Scan,424.62,20
+PKViewMinimizer,1,27,partsupp,3849.9,3849.9,Index Only Scan,434.63,20
+PKViewMinimizer,1,28,partsupp,3859.9,3859.9,Index Only Scan,444.63,20
+PKViewMinimizer,1,29,partsupp,3869.9,3869.9,Index Only Scan,454.62,20
+PKViewMinimizer,1,30,partsupp,3879.9,3879.9,Index Only Scan,464.62,20
+PKViewMinimizer,1,31,partsupp,3889.9,3889.9,Index Only Scan,474.62,20
+PKViewMinimizer,1,32,part,6105.85,6105.85,Index Scan,30.16,1
+PKViewMinimizer,1,33,part,6272.35,6272.35,Index Scan,30.99,1
+PKViewMinimizer,1,34,part,6438.85,6438.85,Index Scan,31.82,1
+PKViewMinimizer,1,35,part,6605.35,6605.35,Index Scan,32.66,1
+PKViewMinimizer,1,36,part,6771.85,6771.85,Index Scan,33.49,1
+PKViewMinimizer,1,37,part,6938.35,6938.35,Index Scan,34.32,1
+PKViewMinimizer,1,38,part,7104.85,7104.85,Index Scan,35.16,1
+PKViewMinimizer,1,39,part,7271.35,7271.35,Index Scan,35.99,1
+PKViewMinimizer,1,40,part,7437.85,7437.85,Index Scan,36.82,1
+PKViewMinimizer,1,41,part,2389.07,2389.07,Bitmap Heap Scan,2344.33,1
+PKViewMinimizer,1,42,part,2394.07,2394.07,Bitmap Heap Scan,2349.33,1
+PKViewMinimizer,1,43,part,2399.07,2399.07,Bitmap Heap Scan,2354.33,1
+PKViewMinimizer,1,44,part,2404.07,2404.07,Bitmap Heap Scan,2359.33,1
+PKViewMinimizer,1,45,part,2409.07,2409.07,Bitmap Heap Scan,2364.33,1
+PKViewMinimizer,1,46,part,2414.07,2414.07,Bitmap Heap Scan,2369.33,1
+PKViewMinimizer,1,47,part,2419.07,2419.07,Bitmap Heap Scan,2374.33,1
+PKViewMinimizer,1,48,part,2424.07,2424.07,Bitmap Heap Scan,2379.33,1
+PKViewMinimizer,1,49,part,2429.07,2429.07,Bitmap Heap Scan,2384.33,1
+PKViewMinimizer,1,50,supplier,46.71,46.71,Index Scan,1.87,17
+PKViewMinimizer,1,51,supplier,46.88,46.88,Index Scan,1.91,17
+PKViewMinimizer,1,52,supplier,43.16,43.16,Index Scan,1.55,1
+PKViewMinimizer,1,53,supplier,43.17,43.17,Index Scan,1.55,1
+PKViewMinimizer,1,54,supplier,43.17,43.17,Index Scan,1.56,1
+PKViewMinimizer,1,55,supplier,43.19,43.19,Index Scan,1.56,1
+PKViewMinimizer,1,56,supplier,43.19,43.19,Index Scan,1.56,1
+PKViewMinimizer,1,57,supplier,43.2,43.2,Index Scan,1.56,1
+PKViewMinimizer,1,58,supplier,43.22,43.22,Index Scan,1.56,1
+PKViewMinimizer,1,59,supplier,43.22,43.22,Index Scan,1.57,1
+PKViewMinimizer,1,60,supplier,43.23,43.23,Index Scan,1.57,1
+PKViewMinimizer,1,61,supplier,43.25,43.25,Index Scan,1.57,1
+PKViewMinimizer,1,62,supplier,43.25,43.25,Index Scan,1.58,1
+PKViewMinimizer,1,63,supplier,43.27,43.27,Index Scan,1.58,1
+PKViewMinimizer,1,64,nation,54.69,54.69,Seq Scan,1.31,8
+PKViewMinimizer,1,65,nation,54.75,54.75,Seq Scan,1.38,8
+PKViewMinimizer,1,66,nation,54.39,54.39,Seq Scan,1.44,1
+PKViewMinimizer,1,67,nation,54.45,54.45,Seq Scan,1.5,1
+PKViewMinimizer,1,68,nation,54.51,54.51,Seq Scan,1.56,1
+PKViewMinimizer,1,69,region,74.73,74.73,Seq Scan,1.07,1
+PKViewMinimizer,1,70,region,74.75,74.75,Seq Scan,1.09,1
+HybridMinimizer,1,1,partsupp,12592.03,12582.28,Index Scan,98.15,2000
+HybridMinimizer,1,2,partsupp,11803.1,11798.35,Index Scan,98.15,1000
+HybridMinimizer,1,3,partsupp,9942.25,9940.0,Tid Range Scan,3334.18,100018
+HybridMinimizer,1,4,partsupp,8026.9,8025.9,Tid Range Scan,1669.2,50019
+HybridMinimizer,1,5,partsupp,7070.05,7069.67,Tid Range Scan,837.42,25041
+HybridMinimizer,1,6,partsupp,6591.24,6591.18,Tid Range Scan,421.53,12552
+HybridMinimizer,1,7,partsupp,6408.99,6408.99,Tid Range Scan,212.87,6286
+HybridMinimizer,1,8,partsupp,6259.85,6259.85,Tid Range Scan,108.54,3153
+HybridMinimizer,1,9,partsupp,6186.46,6186.46,Tid Range Scan,57.09,1608
+HybridMinimizer,1,10,partsupp,6149.54,6149.54,Tid Range Scan,31.36,836
+HybridMinimizer,1,11,partsupp,6128.82,6128.82,Tid Range Scan,18.5,450
+HybridMinimizer,1,12,partsupp,5536.5,5536.5,Tid Range Scan,11.15,215
+HybridMinimizer,1,13,partsupp,4731.2,4731.2,Tid Range Scan,8.29,129
+HybridMinimizer,1,14,partsupp,3940.61,3940.61,Tid Range Scan,5.43,43
+HybridMinimizer,1,15,partsupp,2451.43,2451.43,,,
+HybridMinimizer,1,16,partsupp,2338.03,2338.03,,,
+HybridMinimizer,1,17,partsupp,2337.86,2337.86,,,
+HybridMinimizer,1,18,partsupp,2337.79,2337.79,,,
+HybridMinimizer,1,19,partsupp,2337.74,2337.74,,,
+HybridMinimizer,1,20,part,2342.72,2342.72,Bitmap Heap Scan,2304.33,1
+HybridMinimizer,1,21,part,1748.09,1748.09,Tid Range Scan,1709.68,2
+HybridMinimizer,1,22,part,896.32,896.32,Tid Range Scan,857.92,1
+HybridMinimizer,1,23,part,469.55,469.55,Tid Range Scan,431.15,1
+HybridMinimizer,1,24,part,257.06,257.06,Tid Range Scan,218.66,1
+HybridMinimizer,1,25,part,149.92,149.92,Tid Range Scan,111.52,1
+HybridMinimizer,1,26,part,96.35,96.35,Tid Range Scan,57.95,1
+HybridMinimizer,1,27,part,69.19,69.19,Tid Range Scan,30.79,1
+HybridMinimizer,1,28,part,56.69,56.69,Tid Range Scan,18.29,1
+HybridMinimizer,1,29,part,49.54,49.54,Tid Range Scan,11.15,1
+HybridMinimizer,1,30,part,45.97,45.97,Tid Range Scan,7.58,1
+HybridMinimizer,1,31,part,44.19,44.19,Tid Range Scan,5.79,1
+HybridMinimizer,1,32,part,40.04,40.04,,,
+HybridMinimizer,1,33,part,39.5,39.5,,,
+HybridMinimizer,1,34,part,39.24,39.24,,,
+HybridMinimizer,1,35,part,39.1,39.1,,,
+HybridMinimizer,1,36,part,39.04,39.04,,,
+HybridMinimizer,1,37,part,39.02,39.02,,,
+HybridMinimizer,1,38,supplier,39.09,39.09,Bitmap Heap Scan,33.85,25
+HybridMinimizer,1,39,supplier,38.82,38.82,Bitmap Heap Scan,33.85,13
+HybridMinimizer,1,40,supplier,38.66,38.66,Bitmap Heap Scan,33.85,6
+HybridMinimizer,1,41,supplier,30.37,30.37,Tid Range Scan,24.6,660
+HybridMinimizer,1,42,supplier,18.84,18.84,Tid Range Scan,14.43,342
+HybridMinimizer,1,43,supplier,13.78,13.78,Tid Range Scan,10.07,206
+HybridMinimizer,1,44,supplier,10.27,10.27,Tid Range Scan,6.91,91
+HybridMinimizer,1,45,supplier,5.15,5.15,,,
+HybridMinimizer,1,46,supplier,5.14,5.14,,,
+HybridMinimizer,1,47,supplier,5.14,5.14,,,
+HybridMinimizer,1,48,supplier,5.14,5.14,,,
+HybridMinimizer,1,49,supplier,5.12,5.12,,,
+HybridMinimizer,1,50,nation,5.54,5.54,,,
+HybridMinimizer,1,51,nation,5.36,5.36,,,
+HybridMinimizer,1,52,nation,5.25,5.25,,,
+HybridMinimizer,1,53,nation,5.21,5.21,,,
+HybridMinimizer,1,54,nation,5.19,5.19,,,
+HybridMinimizer,1,55,region,5.2,5.2,,,
+HybridMinimizer,1,56,region,5.15,5.15,,,
