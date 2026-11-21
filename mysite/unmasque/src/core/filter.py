@@ -445,12 +445,13 @@ class Filter(UN2WhereClause):
                     candidates.append(get_val_plus_delta(datatype, d_dmin_cast, step * delta))
                 except Exception:
                     pass
-            # fixed probes
-            for fixed in [0, 1, -1, 100, -100, 500, -500, 1000, -1000]:
-                try:
-                    candidates.append(get_cast_value(datatype, fixed))
-                except Exception:
-                    pass
+            # fixed probes: only for non-date types; dates must use date-safe deltas
+            if datatype != 'date':
+                for fixed in [0, 1, -1, 100, -100, 500, -500, 1000, -1000]:
+                    try:
+                        candidates.append(get_cast_value(datatype, fixed))
+                    except Exception:
+                        pass
 
             gap_point = None
             seen = set()
