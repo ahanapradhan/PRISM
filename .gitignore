@@ -9,3 +9,7 @@ mysite/unmasque/test/native_test/.DS_Store
 mysite/unmasque/test/native_test/results/.DS_Store
 mysite/unmasque/test/.DS_Store
 mysite/unmasque.log
+
+# Native backup helper binary (build with: cd mysite/unmasque/native && make)
+mysite/unmasque/native/pgcopy
+mysite/unmasque/native/pgcopy.dSYM/

@@ -51,6 +51,8 @@ class Config:
         self.disjunction_diagnostics = True
         # Minimizer selection: view (default), copy, pk, hybrid.
         self.minimizer = "view"
+        # Backup/restore method: native (pgcopy binary, fallback to threaded), threaded, serial.
+        self.backup_method = "native"
         self.app_type = ApplicationType.SQL_ERR_FWD
         self.database = "postgres"
         self.table_sizes_dict = {}
@@ -160,6 +162,20 @@ class Config:
             self.minimizer = aliases.get(minimizer, "view")
         except Exception:
             self.minimizer = "view"
+        try:
+            backup_method = str(config_object.get(FEATURE_SECTION, "backup_method", fallback=self.backup_method)).lower().strip()
+            aliases = {
+                "native": "native",
+                "pgcopy": "native",
+                "threaded": "threaded",
+                "parallel": "threaded",
+                "python": "threaded",
+                "serial": "serial",
+                "insert": "serial",
+            }
+            self.backup_method = aliases.get(backup_method, "native")
+        except Exception:
+            self.backup_method = "native"
 
         detect_oj = config_object.get(FEATURE_SECTION, DETECT_OJ)
         if detect_oj.lower() == "no":

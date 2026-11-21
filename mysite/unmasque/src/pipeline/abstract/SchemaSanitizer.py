@@ -2,6 +2,13 @@ import copy
 
 from ...util.Log import Log
 from ...util.constants import UNMASQUE
+from ...util.native_copy import (
+    NativeCopyError,
+    default_index_threads,
+    default_threads,
+    native_copy_available,
+    run_native_copy,
+)
 from ....src.core.abstract.abstractConnection import AbstractConnectionHelper
 from typing import List
 
@@ -37,10 +44,43 @@ class SchemaSanitizer:
     def set_all_relations(self, relations: List[str]):
         self.all_relations.extend(copy.copy(relations))
 
-    def take_backup(self, tables, parallel=True):
-        # Python threads own one connection each, so this also works on Windows
-        # where a native copy helper is unavailable.  Pass parallel=False for
-        # the original serial INSERT ... SELECT behaviour.
+    def take_backup(self, tables=None, parallel=True, sizes=None):
+        # Accept legacy (relations, sizes) style and (tables, parallel=True).
+        if isinstance(parallel, dict) and sizes is None:
+            sizes, parallel = parallel, True
+        if tables is None:
+            tables = list(self.all_relations)
+        else:
+            tables = list(tables)
+        if not tables:
+            return
+        sizes = self.all_sizes if sizes is None else sizes
+        method = self._backup_method()
+        if parallel and method == "native" and self._native_copy_enabled():
+            try:
+                if self.connectionHelper.config.use_index:
+                    for table in tables:
+                        self.__create_tab_indexes(table)
+                for table in tables:
+                    self.drop_derived_relations(table)
+                self._end_open_transaction()
+                result = run_native_copy(
+                    self.connectionHelper.config,
+                    source_schema=self.connectionHelper.config.user_schema,
+                    dest_schema=self.connectionHelper.config.schema,
+                    tables=tables,
+                    sql="like_insert",
+                    rows=self._known_sizes(tables, sizes),
+                    max_threads=default_threads(),
+                    index_threads=default_index_threads(),
+                    mode="backup",
+                    logger=self.logger,
+                )
+                self._log_native_result("backup", result)
+                return
+            except NativeCopyError as error:
+                self.logger.error(f"Native backup failed, falling back: {error}")
+
         for table in tables:
             self.backup_one_table(table, parallel=parallel)
 
@@ -48,7 +88,8 @@ class SchemaSanitizer:
         self.connectionHelper.begin_transaction()
         tables = self.all_relations  # self.connectionHelper.get_all_tables_for_restore()
         for table in tables:
-            self.sanitize_one_table(table)
+            # Keep all restores in caller transaction: native workers cannot join it.
+            self.sanitize_one_table(table, parallel=False, use_native=False)
         self.connectionHelper.commit_transaction()
 
     def restore_db_finally(self):
@@ -60,19 +101,45 @@ class SchemaSanitizer:
         """ This method is called only when UNMASQUE no more needs its working schema"""
         self._create_working_schema()
 
-    def restore_one_table(self, table, parallel=True):
-        self.drop_derived_relations(table)
-        if parallel:
+    def _backup_method(self):
+        return str(getattr(self.connectionHelper.config, "backup_method", "native") or "native").lower()
+
+    def _native_copy_enabled(self):
+        if self._backup_method() != "native":
+            return False
+        return native_copy_available(getattr(self.connectionHelper, "config", None))
+
+    def _end_open_transaction(self):
+        try:
+            self.connectionHelper.commit_transaction()
+        except Exception:
             try:
-                self.connectionHelper.commit_transaction()
+                self.connectionHelper.rollback_transaction()
             except Exception:
                 pass
-            from ...util.threaded_copy import parallel_copy_table
-            parallel_copy_table(self.connectionHelper.config,
-                                self.connectionHelper.config.user_schema,
-                                self.connectionHelper.config.schema, table,
-                                logger=self.logger)
-            return
+
+    def _known_sizes(self, tables, sizes=None):
+        sizes = self.all_sizes if sizes is None else sizes
+        known = {}
+        for table in tables:
+            value = sizes.get(table)
+            if isinstance(value, int) and value >= 0:
+                known[table] = value
+        return known or None
+
+    def _log_native_result(self, action, result):
+        self.logger.debug(
+            f"Native {action}: {len(result.tables)} table(s) in "
+            f"{result.total_seconds:.3f}s (copy={result.copy_seconds:.3f}s, "
+            f"index={result.index_seconds:.3f}s)"
+        )
+        for index in getattr(result, "index_failures", []):
+            self.logger.info(
+                f"Native {action} index skipped for {index.table}: "
+                f"{index.error or 'index build failed'}"
+            )
+
+    def _restore_serial(self, table):
         drop_fn = self.get_drop_fn(table)
         f_table = self.get_fully_qualified_table_name(table)
         backup_name = self.get_original_table_name(table)
@@ -81,6 +148,46 @@ class SchemaSanitizer:
                                            self.connectionHelper.queries.insert_into_tab_select_star_fromtab(
                                                f_table, backup_name)],
                                           self.logger)
+
+    def _restore_threaded(self, table):
+        self._end_open_transaction()
+        from ...util.threaded_copy import parallel_copy_table
+        parallel_copy_table(self.connectionHelper.config,
+                            self.connectionHelper.config.user_schema,
+                            self.connectionHelper.config.schema, table,
+                            logger=self.logger)
+
+    def restore_one_table(self, table, parallel=True, use_native=True):
+        self.drop_derived_relations(table)
+        method = self._backup_method()
+        if parallel and use_native and method == "native" and self._native_copy_enabled():
+            try:
+                self._end_open_transaction()
+                result = run_native_copy(
+                    self.connectionHelper.config,
+                    source_schema=self.connectionHelper.config.user_schema,
+                    dest_schema=self.connectionHelper.config.schema,
+                    tables=[table],
+                    sql="like_insert",
+                    rows=self._known_sizes([table]),
+                    max_threads=default_threads(),
+                    index_threads=default_index_threads(),
+                    mode="restore",
+                    logger=self.logger,
+                )
+                self._log_native_result("restore", result)
+                return
+            except NativeCopyError as error:
+                self.logger.error(f"Native restore of {table} failed, falling back: {error}")
+
+        if parallel and method in ("native", "threaded"):
+            try:
+                self._restore_threaded(table)
+                return
+            except Exception as error:
+                self.logger.error(f"Threaded restore of {table} failed, falling back to serial: {error}")
+
+        self._restore_serial(table)
 
     def __create_col_idx_if_not_exists(self, tab, col):
         idx = f"{tab}_{col}_idx"
@@ -114,20 +221,7 @@ class SchemaSanitizer:
         for col in cols:
             self.__create_col_idx_if_not_exists(tab, col)
 
-    def backup_one_table(self, table, parallel=True):
-        self.logger.debug(f"Backing up {table}...")
-        self.drop_derived_relations(table)
-        if parallel:
-            # The catalog queries above leave this connection in a transaction.
-            # Commit before worker connections take DDL locks in the schema.
-            self.connectionHelper.commit_transaction()
-            from ...util.threaded_copy import parallel_copy_table
-            parallel_copy_table(self.connectionHelper.config,
-                                self.connectionHelper.config.user_schema,
-                                self.connectionHelper.config.schema, table,
-                                logger=self.logger)
-            self.logger.debug("... done (python threads)")
-            return
+    def _backup_serial(self, table):
         self.connectionHelper.begin_transaction()
         working_table = self.get_fully_qualified_table_name(table)
         original_table = self.get_original_table_name(table)
@@ -138,15 +232,58 @@ class SchemaSanitizer:
              self.connectionHelper.queries.insert_into_tab_select_star_fromtab(working_table, original_table)],
             self.logger)
         self.connectionHelper.commit_transaction()
-        self.logger.debug(f"... done")
+
+    def backup_one_table(self, table, parallel=True, use_native=True):
+        self.logger.debug(f"Backing up {table}...")
+        self.drop_derived_relations(table)
+        method = self._backup_method()
+        if parallel and use_native and method == "native" and self._native_copy_enabled():
+            try:
+                if self.connectionHelper.config.use_index:
+                    self.__create_tab_indexes(table)
+                self.drop_derived_relations(table)
+                self._end_open_transaction()
+                result = run_native_copy(
+                    self.connectionHelper.config,
+                    source_schema=self.connectionHelper.config.user_schema,
+                    dest_schema=self.connectionHelper.config.schema,
+                    tables=[table],
+                    sql="like_insert",
+                    rows=self._known_sizes([table]),
+                    max_threads=default_threads(),
+                    index_threads=default_index_threads(),
+                    mode="backup",
+                    logger=self.logger,
+                )
+                self._log_native_result("backup", result)
+                self.logger.debug("... done (native)")
+                return
+            except NativeCopyError as error:
+                self.logger.error(f"Native backup of {table} failed, falling back: {error}")
+
+        if parallel and method in ("native", "threaded"):
+            try:
+                self._end_open_transaction()
+                from ...util.threaded_copy import parallel_copy_table
+                parallel_copy_table(self.connectionHelper.config,
+                                    self.connectionHelper.config.user_schema,
+                                    self.connectionHelper.config.schema, table,
+                                    logger=self.logger)
+                self.logger.debug("... done (python threads)")
+                return
+            except Exception as error:
+                self.logger.error(f"Threaded backup of {table} failed, falling back to serial: {error}")
+
+        self._backup_serial(table)
+        self.logger.debug("... done")
 
     def drop_r_tables(self):
         self.connectionHelper.execute_sql(
             [self.connectionHelper.queries.drop_view(self.get_fully_qualified_table_name("r_e")),
              self.connectionHelper.queries.drop_table(self.get_fully_qualified_table_name("r_h"))])
 
-    def sanitize_one_table(self, table):
-        self.restore_one_table(table)
+    def sanitize_one_table(self, table, parallel=True, use_native=True):
+        self.restore_one_table(table, parallel=parallel, use_native=use_native)
         self.drop_r_tables()
 
     def get_drop_fn(self, table):
