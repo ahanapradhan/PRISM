@@ -456,40 +456,63 @@ class Projection(GenerationPipeLineBase):
 
         self.__infinite_loop(coeff, dep)
         b = np.zeros((2 ** n, 1))
-        for i in range(2 ** n):
-            for j, tab_attrib in enumerate(dep):
-                col = tab_attrib[1]  # self.param_list[idx][j]
-                value = coeff[i][j]
+        try:
+            for i in range(2 ** n):
+                for j, tab_attrib in enumerate(dep):
+                    col = tab_attrib[1]  # self.param_list[idx][j]
+                    value = coeff[i][j]
+                    joined_cols = self.get_other_attribs_in_eqJoin_grp(col)
+                    joined_cols.append(col)
+                    for j_c in joined_cols:
+                        self.update_attrib_in_table(j_c, value, self.find_tabname_for_given_attrib(j_c))
+                        self.logger.debug(f" update {j_c} with {value}")
+
+                exe_result = self.app.doJob(query)
+                self.logger.debug(f"Exe result: {exe_result}")
+                if not self.app.isQ_result_no_full_nullfree_row(exe_result):
+                    null_free_row = self.app.get_nullfree_row(exe_result)
+                    b[i][0] = null_free_row[idx]
+                    self.logger.debug(f"b[{i}][0] = {b[i][0]}")
+                else:
+                    self.logger.error("Why null result? Trouble!!! ")
+                    raise Exception
+            self.logger.debug(dep)
+            self.logger.debug("Coeff: ", coeff, "b: ", b)
+            # self.logger.debug(f"condition number: {str(np.linalg.cond(coeff))}")
+            solution = np.linalg.solve(coeff, b)
+            solution = np.around(solution, decimals =un_precision + 1)
+            final_res = 0
+            for i, ele in enumerate(self.syms[idx]):
+                final_res += (ele * solution[i])
+            self.logger.debug("Coeff of 1", solution[len(self.syms[idx]) - 1])
+            final_res += 1 * solution[-1]
+            self.logger.debug("Equation", coeff, b)
+            self.logger.debug("Solution", solution)
+            res_expr = beautify_scalar_func(final_res, local_symbol_list, dep)
+            projected_attrib[idx] = str(round_expr(res_expr, un_precision))
+            return solution
+        finally:
+            # Restore dep attribs (and their join-equivalent cols) to original dmin to avoid
+            # AOA/constraint inconsistencies leaking across projection solves.
+            for tab_attrib in dep:
+                col, tab = tab_attrib[1], tab_attrib[0]
+                try:
+                    values = self.global_min_instance_dict[tab]
+                    attribs, vals = values[0], values[1]
+                    dmin_val = vals[attribs.index(col)]
+                except Exception:
+                    dmin_val = self.get_dmin_val(col, tab)
                 joined_cols = self.get_other_attribs_in_eqJoin_grp(col)
                 joined_cols.append(col)
                 for j_c in joined_cols:
-                    self.update_attrib_in_table(j_c, value, self.find_tabname_for_given_attrib(j_c))
-                    self.logger.debug(f" update {j_c} with {value}")
-
-            exe_result = self.app.doJob(query)
-            self.logger.debug(f"Exe result: {exe_result}")
-            if not self.app.isQ_result_no_full_nullfree_row(exe_result):
-                null_free_row = self.app.get_nullfree_row(exe_result)
-                b[i][0] = null_free_row[idx]
-                self.logger.debug(f"b[{i}][0] = {b[i][0]}")
-            else:
-                self.logger.error("Why null result? Trouble!!! ")
-                raise Exception
-        self.logger.debug(dep)
-        self.logger.debug("Coeff: ", coeff, "b: ", b)
-        # self.logger.debug(f"condition number: {str(np.linalg.cond(coeff))}")
-        solution = np.linalg.solve(coeff, b)
-        solution = np.around(solution, decimals =un_precision + 1)
-        final_res = 0
-        for i, ele in enumerate(self.syms[idx]):
-            final_res += (ele * solution[i])
-        self.logger.debug("Coeff of 1", solution[len(self.syms[idx]) - 1])
-        final_res += 1 * solution[-1]
-        self.logger.debug("Equation", coeff, b)
-        self.logger.debug("Solution", solution)
-        res_expr = beautify_scalar_func(final_res, local_symbol_list, dep)
-        projected_attrib[idx] = str(round_expr(res_expr, un_precision))
-        return solution
+                    j_tab = self.find_tabname_for_given_attrib(j_c)
+                    try:
+                        j_vals = self.global_min_instance_dict[j_tab]
+                        j_attribs, j_vals_list = j_vals[0], j_vals[1]
+                        j_dmin = j_vals_list[j_attribs.index(j_c)]
+                    except Exception:
+                        j_dmin = dmin_val
+                    self.update_attrib_in_table(j_c, j_dmin, j_tab)
 
     def __infinite_loop(self, coeff, dep):
         n = len(dep)
@@ -546,8 +569,36 @@ class Projection(GenerationPipeLineBase):
             elif datatype == 'numeric':
                 s_val = round(random.uniform(mini, maxi), un_precision + 1)
         if s_val is None:
+            datatype = self.get_datatype(key)
+            # Respect AOA predicate bounds (generic: uses AOA predicates + current dmin).
+            lb, ub = self.get_aoa_implied_bounds(key[0], key[1], datatype)
+            try:
+                from ...src.util.utils import get_min_and_max_val
+            except Exception:
+                from ...util.utils import get_min_and_max_val
+            i_min, i_max = get_min_and_max_val(datatype)
+            if lb > i_min or ub < i_max:
+                mini, maxi = lb, ub
             self.logger.debug(f"mini: {mini}, maxi: {maxi}")
-            s_val = random.randrange(math.floor(mini), math.ceil(maxi))
+            if datatype == 'numeric':
+                lo_f, hi_f = float(mini), float(maxi)
+                if lo_f >= hi_f:
+                    hi_f = lo_f + 1
+                s_val = round(random.uniform(lo_f, hi_f), un_precision + 1)
+            elif datatype == 'date':
+                if mini == maxi:
+                    s_val = mini
+                else:
+                    try:
+                        span = (maxi - mini).days
+                        s_val = mini if span <= 0 else mini + __import__('datetime').timedelta(days=random.randint(0, span))
+                    except Exception:
+                        s_val = mini
+            else:
+                lo, hi = math.floor(float(mini)), math.ceil(float(maxi))
+                if lo >= hi:
+                    hi = lo + 1
+                s_val = random.randrange(lo, hi)
         s_val = self._scalar_probe_value(s_val)
         self.logger.debug(f"s-value for {key} is {s_val}, assigned to coeff[{outer_idx}][{j}]")
         coeff[outer_idx][j] = s_val

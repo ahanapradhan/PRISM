@@ -600,3 +600,11 @@ class InequalityPredicate(FilterHolder):
             max_val = self.__absorbed_LBs[tab_attrib][0] if tab_attrib in self.__absorbed_LBs.keys() else i_max
             min_val = i_min
         return min_val, max_val
+
+    @property
+    def absorbed_LBs(self):
+        return self.__absorbed_LBs
+
+    @property
+    def absorbed_UBs(self):
+        return self.__absorbed_UBs

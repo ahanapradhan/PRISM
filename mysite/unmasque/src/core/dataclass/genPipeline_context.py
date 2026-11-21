@@ -188,6 +188,8 @@ class GenPipelineContext:
         self.get_datatype = filter_extractor.get_datatype
         self.do_permanent_mutation = aoa_extractor.do_permanent_mutation
         self.restore_dmin_from_dict = aoa_extractor.restore_d_min_from_dict
+        self._absorbed_LBs = aoa_extractor.absorbed_LBs
+        self._absorbed_UBs = aoa_extractor.absorbed_UBs
 
     # ---- CNF/route-aware helpers (guarded, legacy no-op when CNF absent) ----
     def has_structured_cnf(self) -> bool:
@@ -265,26 +267,65 @@ class GenPipelineContext:
         update_arithmetic_aoa_commons(LB_dict, UB_dict, filter_attrib_dict)
         update_aoa_LB_UB(LB_dict, UB_dict, filter_attrib_dict)
         self.__update_aoa_single_bounds(LB_dict, UB_dict, filter_attrib_dict)
+        self.__strip_absorbed_bounds(filter_attrib_dict)
         all_keys = list(filter_attrib_dict.keys())
         for entry in all_keys:
             self.__add_for_joined_attribs(entry, filter_attrib_dict)
         return filter_attrib_dict
 
+    def __strip_absorbed_bounds(self, filter_attrib_dict):
+        absorbed_LBs = getattr(self, "_absorbed_LBs", {})
+        absorbed_UBs = getattr(self, "_absorbed_UBs", {})
+        to_del = []
+        for attrib, val in list(filter_attrib_dict.items()):
+            if not isinstance(val, tuple) or len(val) != 2:
+                continue
+            if not isinstance(attrib, tuple) or len(attrib) != 2:
+                continue
+            lb, ub = val[0], val[1]
+            datatype = self.attrib_types_dict.get(attrib)
+            if datatype is None:
+                continue
+            try:
+                i_min, i_max = get_min_and_max_val(datatype)
+            except Exception:
+                continue
+            if attrib in absorbed_LBs and lb in absorbed_LBs[attrib]:
+                lb = i_min
+            if attrib in absorbed_UBs and ub in absorbed_UBs[attrib]:
+                ub = i_max
+            if lb == i_min and ub == i_max:
+                to_del.append(attrib)
+            elif (lb, ub) != val:
+                filter_attrib_dict[attrib] = (lb, ub)
+        for attrib in to_del:
+            del filter_attrib_dict[attrib]
+
     def __update_aoa_single_bounds(self, LB_dict: dict, UB_dict: dict, filter_attrib_dict):
         to_del_LB = []
         for attrib in LB_dict.keys():
+            val = LB_dict[attrib]
+            absorbed = getattr(self, "_absorbed_LBs", {})
+            if attrib in absorbed and val in absorbed[attrib]:
+                to_del_LB.append(attrib)
+                continue
             datatype = self.attrib_types_dict[attrib]
             _, i_max = get_min_and_max_val(datatype)
-            filter_attrib_dict[attrib] = (LB_dict[attrib], i_max)
+            filter_attrib_dict[attrib] = (val, i_max)
             to_del_LB.append(attrib)
         for attrib in to_del_LB:
             del LB_dict[attrib]
 
         to_del_UB = []
         for attrib in UB_dict.keys():
+            val = UB_dict[attrib]
+            absorbed = getattr(self, "_absorbed_UBs", {})
+            if attrib in absorbed and val in absorbed[attrib]:
+                to_del_UB.append(attrib)
+                continue
             datatype = self.attrib_types_dict[attrib]
             i_min, _ = get_min_and_max_val(datatype)
-            filter_attrib_dict[attrib] = (i_min, UB_dict[attrib])
+            filter_attrib_dict[attrib] = (i_min, val)
             to_del_UB.append(attrib)
         for attrib in to_del_UB:
             del UB_dict[attrib]

@@ -184,6 +184,53 @@ class GenerationPipeLineBase(MutationPipeLineBase):
         val = ub if prev == lb else lb
         return val
 
+    def get_aoa_implied_bounds(self, tabname: str, attrib: str, datatype: str):
+        """Return (lb, ub) implied by AOA predicates for (tabname, attrib), using current dmin values."""
+        from ...util.utils import get_min_and_max_val
+        i_min, i_max = get_min_and_max_val(datatype)
+        lb, ub = i_min, i_max
+        gen_ctx = getattr(self, "_gen_ctx", None)
+        if gen_ctx is None:
+            return lb, ub
+        key = (tabname, attrib)
+        le_preds = getattr(gen_ctx, "global_aoa_le_predicates", []) or []
+        l_preds = getattr(gen_ctx, "global_aoa_l_predicates", []) or []
+        def _current_val(attrib):
+            if not isinstance(attrib, tuple):
+                return attrib
+            tab, col = attrib[0], attrib[1]
+            try:
+                fqtn = self.get_fully_qualified_table_name(tab)
+                val = self.connectionHelper.execute_sql_fetchone_0(
+                    self.connectionHelper.queries.select_attribs_from_relation([col], fqtn))
+                if val is not None:
+                    return val
+            except Exception:
+                pass
+            return self.get_dmin_val(col, tab)
+
+        for pred in le_preds:
+            l_attrib, r_attrib = pred[0], pred[1]
+            if r_attrib == key:
+                l_val = _current_val(l_attrib)
+                if l_val is not None and l_val > lb:
+                    lb = l_val
+            if l_attrib == key:
+                r_val = _current_val(r_attrib)
+                if r_val is not None and r_val < ub:
+                    ub = r_val
+        for pred in l_preds:
+            l_attrib, r_attrib = pred[0], pred[1]
+            if r_attrib == key:
+                l_val = _current_val(l_attrib)
+                if l_val is not None and l_val >= lb:
+                    lb = l_val
+            if l_attrib == key:
+                r_val = _current_val(r_attrib)
+                if r_val is not None and r_val <= ub:
+                    ub = r_val
+        return lb, ub
+
     def get_different_s_val(self, attrib: str, tabname: str, prev) -> Union[int, float, date, str]:
         datatype = self.get_datatype((tabname, attrib))
         self.logger.debug(f"datatype of {attrib} is {datatype}")
@@ -191,7 +238,25 @@ class GenerationPipeLineBase(MutationPipeLineBase):
             if (tabname, attrib) in self.filter_attrib_dict.keys():
                 val = self.get_other_than_dmin_val_nonText(attrib, tabname, prev)
             else:
-                val = get_unused_dummy_val(datatype, [prev])
+                lb, ub = self.get_aoa_implied_bounds(tabname, attrib, datatype)
+                from ...util.utils import get_min_and_max_val
+                i_min, i_max = get_min_and_max_val(datatype)
+                if lb > i_min or ub < i_max:
+                    # AOA-constrained: pick a value satisfying AOA bounds, different from prev.
+                    def _dist(a, b):
+                        if datatype == 'date':
+                            return abs((a - b).days)
+                        return abs(float(a) - float(b))
+                    if prev <= lb:
+                        val = ub
+                    elif prev >= ub:
+                        val = lb
+                    else:
+                        val = ub if _dist(ub, prev) >= _dist(prev, lb) else lb
+                    if val == prev:
+                        val = get_unused_dummy_val(datatype, [prev])
+                else:
+                    val = get_unused_dummy_val(datatype, [prev])
             if datatype == 'date':
                 val = ast.literal_eval(get_format(datatype, val))
         else:
