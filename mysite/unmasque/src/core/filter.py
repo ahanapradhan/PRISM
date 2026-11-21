@@ -256,9 +256,14 @@ class Filter(UN2WhereClause):
             # Geometric offsets from dmin_val to catch gaps far from midpoints.
             for step in [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 50000, 100000, 500000, 1000000]:
                 candidates.extend([f_d - step, f_d + step])
-            # A few fixed probes within domain (helpful for huge symmetric domains)
-            for fixed in [0.0, 1.0, -1.0, 100.0, -100.0, 500.0, -500.0, 1000.0, -1000.0]:
-                candidates.append(fixed)
+            # Domain-aware fractional probes (no arbitrary fixed constants).
+            try:
+                span = f_max - f_min
+                if span > 0:
+                    for frac in [0.125, 0.25, 0.375, 0.625, 0.75, 0.875]:
+                        candidates.append(f_min + span * frac)
+            except Exception:
+                pass
 
             seen = set()
             for c in candidates:
@@ -445,13 +450,20 @@ class Filter(UN2WhereClause):
                     candidates.append(get_val_plus_delta(datatype, d_dmin_cast, step * delta))
                 except Exception:
                     pass
-            # fixed probes: only for non-date types; dates must use date-safe deltas
-            if datatype != 'date':
-                for fixed in [0, 1, -1, 100, -100, 500, -500, 1000, -1000]:
-                    try:
-                        candidates.append(get_cast_value(datatype, fixed))
-                    except Exception:
-                        pass
+            # Domain-aware fractional probes (no arbitrary fixed constants).
+            try:
+                span = d_max_cast - d_min_cast
+                if datatype == 'date':
+                    span_days = span.days if hasattr(span, 'days') else int(span)
+                    for frac_num, frac_den in [(1, 4), (3, 4), (1, 8), (7, 8), (1, 16), (15, 16)]:
+                        offset = (span_days * frac_num) // frac_den
+                        candidates.append(get_val_plus_delta(datatype, d_min_cast, offset))
+                elif span is not None:
+                    for frac_num, frac_den in [(1, 4), (3, 4), (1, 8), (7, 8), (1, 16), (15, 16)]:
+                        offset = (span * frac_num) // frac_den if datatype in INT_TYPES else (span * frac_num / frac_den)
+                        candidates.append(get_val_plus_delta(datatype, d_min_cast, offset))
+            except Exception:
+                pass
 
             gap_point = None
             seen = set()
