@@ -1,5 +1,6 @@
 import math
 import random
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 
 import numpy as np
 from sympy import symbols, expand, collect, nsimplify, Rational, Integer, simplify
@@ -16,7 +17,46 @@ from ...src.util.utils import count_empty_lists_in, find_diff_idx, get_format
 
 
 def round_expr(expr, num_digits):
-    return expr.xreplace({n: round(n, num_digits) for n in expr.atoms(Rational) if not isinstance(n, Integer)})
+    # simplify() may factor an expression as -x*(1000*y + 191)/1000. Rounding
+    # the -1/1000 atom then deletes the entire product. Expand first so each
+    # rational coefficient is rounded on its own.
+    expr = expand(expr)
+    return expr.xreplace({n: round(float(n), num_digits) for n in expr.atoms(Rational) if not isinstance(n, Integer)})
+
+
+def _cap_probe_last_digit(value, decimals=un_precision + 1):
+    """Keep the last generated probe digit in the range 0..4.
+
+    Numeric probes are generated with one more decimal than the projection
+    output precision. When that last digit is 5 or more, a numeric(15,2)
+    column rounds the stored value up, while the coefficient matrix still
+    uses the requested value. Keeping the digit at 4 or below preserves the
+    finer probe grid without landing on/above the storage rounding boundary.
+    """
+    quantum = Decimal(1).scaleb(-decimals)
+    dec = Decimal(str(value)).quantize(quantum, rounding=ROUND_DOWN)
+    scaled = int((abs(dec) / quantum).to_integral_value(rounding=ROUND_DOWN))
+    last_digit = scaled % 10
+    if last_digit > 4:
+        sign = Decimal(-1) if dec < 0 else Decimal(1)
+        dec -= sign * Decimal(last_digit - 4) * quantum
+    return float(dec)
+
+
+def _random_numeric_probe(low, high, decimals=un_precision + 1):
+    return _cap_probe_last_digit(random.uniform(float(low), float(high)), decimals)
+
+
+def _stored_numeric_probe(value, decimals=un_precision):
+    """Value a numeric column actually stores for the generated probe.
+
+    Numeric probes are generated with one extra decimal for conditioning, but
+    the table column stores only ``decimals`` places. The coefficient matrix
+    must use the stored value (including for product terms) or the observed
+    result will not satisfy the equation being solved.
+    """
+    quantum = Decimal(1).scaleb(-decimals)
+    return float(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
 
 
 def if_dependencies_found_incomplete(projection_names, projection_dep):
@@ -353,60 +393,31 @@ class Projection(GenerationPipeLineBase):
             self.restore_cnf_probe_state(saved, prev_route, prev_pins)
 
     def find_solution_on_multi(self, projected_attrib, projection_dep, query):
-        sols = []
-        for i in range (1,3): #trying to get the solution twice
-            solution = []
-            for idx_pro, ele in enumerate(projected_attrib):
-                self.logger.debug("ele being checked, bravo1", ele, idx_pro)
-                if projection_dep[idx_pro] == [] or (
-                        len(projection_dep[idx_pro]) < 2 and projection_dep[idx_pro][0][0] == constants.IDENTICAL_EXPR):
-                    self.logger.debug("Simple Projection, Continue")
-                    # Identical output column, so append empty list and continue
-                    solution.append([])
-                    self.param_list.append([])
-                    self.syms.append([])
+        # One pass is sufficient now that the projection system is built with
+        # independent equations. The old second pass existed only to recover
+        # from singular matrices and could disagree with the first pass,
+        # leaving the emitted expression out of sync with the returned solution.
+        solution = []
+        for idx_pro, ele in enumerate(projected_attrib):
+            self.logger.debug("ele being checked, bravo1", ele, idx_pro)
+            if projection_dep[idx_pro] == [] or (
+                    len(projection_dep[idx_pro]) < 2 and projection_dep[idx_pro][0][0] == constants.IDENTICAL_EXPR):
+                self.logger.debug("Simple Projection, Continue")
+                # Identical output column, so append empty list and continue
+                solution.append([])
+                self.param_list.append([])
+                self.syms.append([])
+            else:
+                value_used = self.construct_value_used_with_dmin()
+                self.logger.debug("Inside else", value_used)
+                if self.has_structured_cnf():
+                    solution.append(self._get_solution_cnf(projected_attrib, projection_dep, idx_pro, value_used, query))
                 else:
-                    value_used = self.construct_value_used_with_dmin()
-                    self.logger.debug("Inside else", value_used)
-                    if self.has_structured_cnf():
-                        solution.append(self._get_solution_cnf(projected_attrib, projection_dep, idx_pro, value_used, query))
-                    else:
-                        solution.append(self.get_solution(projected_attrib, projection_dep, idx_pro, value_used, query))
-                    self.logger.debug("viola1",solution)
-            sols.append(solution)
+                    solution.append(self.get_solution(projected_attrib, projection_dep, idx_pro, value_used, query))
+                self.logger.debug("viola1", solution)
 
-        self.logger.debug("First coeff: ", sols[0])
-        self.logger.debug("Second coeff: ", sols[1])
-
-        # Function to compare two solutions
-        def matching_solutions(sol1, sol2):
-            i = 0
-            for item1, item2 in zip(sol1, sol2):
-                if isinstance(item1, np.ndarray) and isinstance(item2, np.ndarray):
-                    if not np.allclose(item1, item2):
-                        return False, i
-                elif isinstance(item1, list) and isinstance(item2, list):
-                    if item1 != item2:
-                        return False, i
-                else:
-                    return False, i
-                i += 1
-            return True, i
-
-        if sols[0] is None:
-            return sols[1] if sols[1] is not None else print("Singular matrix error")
-
-        if sols[1] is None:
-            return sols[0]
-
-        sols_comparison, index = matching_solutions(sols[0], sols[1])
-        if sols_comparison:
-            return sols[0]
-        else:
-            print("Projected attribute in place",index+1, "in extracted query is not extracted correctly.")
-            # print("Solution 1 ", sols[0][index])
-            # print("Solution 2 ", sols[1][index])
-        return sols[0]
+        self.logger.debug("Solution: ", solution)
+        return solution
 
     """
     Solve Ax=b to get the expression of the output column
@@ -632,8 +643,7 @@ class Projection(GenerationPipeLineBase):
                 values = {}
                 for j, ele in enumerate(dep):
                     key = (ele[0], ele[1])
-                    self.__assign_s_val_in_coeffMatrix(coeff, j, key, outer_idx)
-                    s_val = coeff[outer_idx][j]
+                    s_val = self.__assign_s_val_in_coeffMatrix(coeff, j, key, outer_idx)
                     values[key] = s_val
                     # Mutate dmin now so later attributes see updated AOA bounds.
                     # key is (tabname, attrib); _set_dep_value takes (attrib, tabname).
@@ -708,7 +718,7 @@ class Projection(GenerationPipeLineBase):
             if datatype == 'int':
                 s_val = random.randrange(mini, maxi)
             elif datatype == 'numeric':
-                s_val = round(random.uniform(mini, maxi), un_precision + 1)
+                s_val = _random_numeric_probe(mini, maxi)
         if s_val is None:
             datatype = self.get_datatype(key)
             # Respect AOA predicate bounds (generic: uses AOA predicates + current dmin).
@@ -727,7 +737,7 @@ class Projection(GenerationPipeLineBase):
                 lo_f, hi_f = float(mini), float(maxi)
                 if lo_f >= hi_f:
                     hi_f = lo_f + 1
-                s_val = round(random.uniform(lo_f, hi_f), un_precision + 1)
+                s_val = _random_numeric_probe(lo_f, hi_f)
             elif datatype == 'date':
                 if mini == maxi:
                     s_val = mini
@@ -743,8 +753,19 @@ class Projection(GenerationPipeLineBase):
                     hi = lo + 1
                 s_val = random.randrange(lo, hi)
         s_val = self._scalar_probe_value(s_val)
-        self.logger.debug(f"s-value for {key} is {s_val}, assigned to coeff[{outer_idx}][{j}]")
-        coeff[outer_idx][j] = s_val
+        if self.get_datatype(key) == 'numeric':
+            # Keep the generated probe for the DB mutation, but solve against
+            # the value the numeric column actually stores. Otherwise product
+            # terms built from the extra decimal disagree with the observed b.
+            coeff_value = _stored_numeric_probe(s_val)
+        else:
+            coeff_value = s_val
+        self.logger.debug(
+            f"s-value for {key} is {s_val}; coeff uses {coeff_value}, "
+            f"assigned to coeff[{outer_idx}][{j}]"
+        )
+        coeff[outer_idx][j] = coeff_value
+        return s_val
 
     def __get_min_max_s_values(self, key, maxi, mini):
         lb, ub = get_boundary_value(self.filter_attrib_dict[key][0], is_ub=False), get_boundary_value(
@@ -1040,7 +1061,17 @@ def _snap_and_refit_constant(solution, coeff, b, decimals):
             for j in range(rows - 1)
         )
         residuals.append(Fraction(str(b[i][0])) - predicted)
-    solution[rows - 1][0] = round(float(sum(residuals) / len(residuals)), decimals)
+    residual_values = [float(r) for r in residuals]
+    spread = max(residual_values) - min(residual_values) if residual_values else 0.0
+    # A genuine constant (A7's +1, for example) leaves the same residual in
+    # every probe row. When residuals disagree, the leftover is rounding noise
+    # from large probe products; adding it as a constant breaks the aggregate
+    # probe, so leave the expression constant-free instead.
+    if len(residual_values) > 1 and spread > 0.05:
+        constant = 0.0
+    else:
+        constant = round(sum(residual_values) / len(residual_values), decimals)
+    solution[rows - 1][0] = constant
     return solution
 
 
