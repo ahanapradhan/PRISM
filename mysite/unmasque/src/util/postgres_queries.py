@@ -240,7 +240,9 @@ class PostgresQueries(CommonQueries):
         return f"SET {setting}={value};"
 
     def hash_aggregate_probe_settings(self):
-        return [("enable_sort", "off"), ("enable_hashagg", "on")]
+        # execute_sql() expects SQL strings, not (setting, value) tuples.
+        return [self.set_configuration("enable_sort", "off"),
+                self.set_configuration("enable_hashagg", "on")]
 
     def set_search_path(self, schema):
         return f"set search_path='{schema}';"
