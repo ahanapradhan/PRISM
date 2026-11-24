@@ -364,6 +364,10 @@ class QueryStringGenerator:
                 continue
             key = (elt[0], elt[1], elt[2])
             value = elt[3]
+            # An empty string here is a probe artifact (see
+            # _extract_nep_op_info), not a value excluded by the query.
+            if value in ('', None):
+                continue
             if key not in nep_dict.keys():
                 nep_dict[key] = [value]
             else:
@@ -383,6 +387,22 @@ class QueryStringGenerator:
         for pred in t_remove:
             self._workingCopy.arithmetic_filters.remove(pred)
         return t_remove
+
+    def strip_spurious_nep_filters(self):
+        """Drop '<> empty' predicates left behind by NEP string probes.
+
+        They are harmless semantically but are probe artifacts, not query
+        predicates, so they must not appear in the final extracted query.
+        They are kept until this point because the NEP loop uses query changes
+        as its progress signal.
+        """
+        self.logger.debug("STRIP BEFORE: ", self._workingCopy.arithmetic_filters)
+        self._workingCopy.arithmetic_filters = [
+            pred for pred in self._workingCopy.arithmetic_filters
+            if not (len(pred) >= 4 and pred[2] in ('<>', '!=')
+                    and pred[3] in ('', None))
+        ]
+        self.logger.debug("STRIP AFTER: ", self._workingCopy.arithmetic_filters)
 
     def rewrite_for_NEP(self):
         t_remove = self.__consolidate_nep_filters_for_not_in()

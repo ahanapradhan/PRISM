@@ -1,4 +1,5 @@
 import logging
+from itertools import combinations
 from typing import List
 
 from .abstract.GenerationPipeLineBase import GenerationPipeLineBase
@@ -273,6 +274,11 @@ class NEP(GenerationPipeLineBase):
             self.__update_key_attib_with_val(join_tabnames, other_attribs, prev, val)
             self.__update_filter_attribs_from_res(new_result, filterAttribs, join_tabnames, other_attribs, prev)
 
+    def __current_attrib_val(self, attrib, tabname):
+        return self.connectionHelper.execute_sql_fetchone_0(
+            self.connectionHelper.queries.select_attribs_from_relation(
+                [attrib], self.get_fully_qualified_table_name(tabname)))
+
     def __check_per_single_attrib(self, attrib_list, filterAttribs, query, tabname):
         if self.joined_attribs is not None:
             joined_attrib_set = set(self.joined_attribs)
@@ -281,16 +287,40 @@ class NEP(GenerationPipeLineBase):
             single_attribs = attrib_list
         for attrib in single_attribs:
             self.logger.debug(tabname, attrib)
-            prev = self.connectionHelper.execute_sql_fetchone_0(
-                self.connectionHelper.queries.select_attribs_from_relation([attrib],
-                                                                           self.get_fully_qualified_table_name(
-                                                                               tabname)))
+            prev = self.__current_attrib_val(attrib, tabname)
             val = self.get_different_s_val(attrib, tabname, prev)
             self.logger.debug("update ", tabname, attrib, "with value ", val, " prev", prev)
             self.update_with_val(attrib, tabname, val)
             new_result = self.app.doJob(query)
             self.update_with_val(attrib, tabname, prev)
             self.__update_filter_attribs_from_res(new_result, filterAttribs, [tabname], [attrib], prev)
+
+        # The minimized database may violate several conjunctive <> predicates
+        # at once (e.g. NEP4: p_size <> 20 AND p_mfgr <> 'Manufacturer#3').
+        # Mutating one attribute at a time can never make such a row visible,
+        # so the single-attribute probes above all return empty. Try small
+        # combinations of attributes; a non-empty result after mutating a group
+        # means every attribute in that group was excluded by the hidden query.
+        if filterAttribs:
+            return
+        prevs = {attrib: self.__current_attrib_val(attrib, tabname)
+                 for attrib in single_attribs}
+        for size in range(2, min(len(single_attribs), 4) + 1):
+            for combo in combinations(single_attribs, size):
+                values = {attrib: self.get_different_s_val(attrib, tabname, prevs[attrib])
+                          for attrib in combo}
+                for attrib in combo:
+                    self.update_with_val(attrib, tabname, values[attrib])
+                try:
+                    new_result = self.app.doJob(query)
+                finally:
+                    for attrib in combo:
+                        self.update_with_val(attrib, tabname, prevs[attrib])
+                if not self.app.isQ_result_empty(new_result):
+                    for attrib in combo:
+                        filterAttribs.append((tabname, attrib, '<>', prevs[attrib]))
+                    self.logger.debug("combined NEP filters: ", filterAttribs)
+                    return
 
     def __update_filter_attribs_from_res(self, new_result, filterAttribs, tabs, attribs, prev):
         if not self.app.isQ_result_empty(new_result):

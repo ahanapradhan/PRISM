@@ -38,6 +38,12 @@ class NepPipeLine(GenericPipeLine, ABC):
         nep_minimizer = NepMinimizer(self.connectionHelper, core_relations, sizes)
         nep_extractor = NEP(self.connectionHelper, genCtx)
 
+        def finish():
+            # '<> empty' predicates are probe artifacts used to drive the NEP
+            # loop; they must not survive into the final extracted query.
+            self.q_generator.strip_spurious_nep_filters()
+            return self.q_generator.rewrite_for_NEP()
+
         for i in range(self.NEP_CUTOFF):
             previous_eq = eq
             self.update_state(NEP_ + RESULT_COMPARE + START)
@@ -45,12 +51,12 @@ class NepPipeLine(GenericPipeLine, ABC):
             matched = nep_minimizer.match(query, eq)
             self.update_state(NEP_COMPARATOR + DONE)
             if matched is None:
-                eq = self.q_generator.rewrite_for_NEP()
+                eq = finish()
                 self.error = "Extracted Query is not semantically correct!..not going to try to extract NEP!"
                 self.logger.error(self.error)
                 return eq
             if matched:
-                eq = self.q_generator.rewrite_for_NEP()
+                eq = finish()
                 self.logger.info("No NEP!")
                 return eq
 
@@ -81,6 +87,6 @@ class NepPipeLine(GenericPipeLine, ABC):
         else:
             self.logger.info(f"NEP extraction reached cutoff {self.NEP_CUTOFF}.")
 
-        eq = self.q_generator.rewrite_for_NEP()
+        eq = finish()
         self.logger.debug("returning..", eq)
         return eq
