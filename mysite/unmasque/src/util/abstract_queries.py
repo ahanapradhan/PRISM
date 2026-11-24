@@ -267,3 +267,35 @@ class CommonQueries(ABC):
     @abstractmethod
     def select_except_all_existence_flags(self, left_table, right_table):
         pass
+
+    # Result comparison canonicalizes every projected value to trimmed text.
+    # UNION arm order decides the first arm's type/typmod in PostgreSQL; two
+    # semantically identical results can therefore differ only in padding or
+    # representation. Casting both sides to text and trimming surrounding
+    # whitespace makes the comparator depend on the values, not on that order.
+    CANONICAL_TRIM_CHARS = " \\t\\n\\r\\f\\v"
+
+    def quote_identifier(self, identifier):
+        return '"' + str(identifier).replace('"', '""') + '"'
+
+    def canonical_text_expression(self, column, alias=None):
+        quoted = self.quote_identifier(column)
+        if alias is not None:
+            quoted = f"{self.quote_identifier(alias)}.{quoted}"
+        return f"btrim({quoted}::text, E'{self.CANONICAL_TRIM_CHARS}')"
+
+    def canonical_select_list(self, columns, alias=None):
+        return ", ".join(
+            f"{self.canonical_text_expression(column, alias)} AS {self.quote_identifier(column)}"
+            for column in columns
+        )
+
+    def canonical_query(self, query, columns):
+        return f"select {self.canonical_select_list(columns, 'q')} from ({query}) as q"
+
+    def insert_canonical_into_table_select_columns_from_query(self, table, columns, query):
+        quoted_columns = ", ".join(self.quote_identifier(column) for column in columns)
+        return (
+            f"insert into {table} ({quoted_columns}) "
+            f"select {self.canonical_select_list(columns, 'q')} from ({query}) as q;"
+        )

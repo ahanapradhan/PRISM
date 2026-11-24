@@ -96,11 +96,14 @@ class FinalResultComparator(ResultComparator):
         return self.connectionHelper.queries.drop_view_or_table_cascade(
             self.connectionHelper.config.schema, table)
 
-    def _r_e_columns(self):
+    def _columns_of(self, table):
         rows, _ = self.connectionHelper.execute_sql_fetchall(
             self.connectionHelper.queries.get_column_details_for_table(
-                self.connectionHelper.config.schema, self.r_e))
+                self.connectionHelper.config.schema, table))
         return [row[0] for row in rows]
+
+    def _r_e_columns(self):
+        return self._columns_of(self.r_e)
 
     def _execute_rowcount(self, sql):
         """Run ``sql`` and return the number of rows it wrote, or None on failure."""
@@ -114,14 +117,40 @@ class FinalResultComparator(ResultComparator):
             return None
 
     def create_view_from_Q_E(self, Q_E):
+        """Materialize Q_E with canonical, whitespace-trimmed text columns.
+
+        A temporary raw table is used only to discover the projected column
+        names. The final ``r_e`` table stores every value as trimmed text, so
+        the later hash/EXCEPT checks cannot be affected by the first UNION arm
+        deciding a character type or typmod.
+        """
         started = time.time()
         q_e = Q_E.strip().rstrip(';')
+        raw_table = f"{self.r_e}_raw"
+        raw_qualified = self.get_fully_qualified_table_name(raw_table)
         self.connectionHelper.execute_sql(
             [self.connectionHelper.queries.set_search_path(self.app.data_schema),
-             self._drop_relation(self.r_e)])
+             self._drop_relation(raw_table)])
         self.row_count_r_e = self._execute_rowcount(
             self.connectionHelper.queries.create_unlogged_table_as_query(
-                self.get_fully_qualified_table_name(self.r_e), q_e))
+                raw_qualified, q_e))
+        if self.row_count_r_e is None:
+            self.connectionHelper.execute_sql([self._drop_relation(raw_table)])
+            return None
+
+        columns = self._columns_of(raw_table)
+        if not columns:
+            self.connectionHelper.execute_sql([self._drop_relation(raw_table)])
+            self.logger.error("Extracted query produced no columns; cannot compare results")
+            return None
+
+        canonical_query = self.connectionHelper.queries.canonical_query(
+            f"select * from {raw_qualified}", columns)
+        self.connectionHelper.execute_sql(
+            [self._drop_relation(self.r_e),
+             self.connectionHelper.queries.create_unlogged_table_as_query(
+                 self.get_fully_qualified_table_name(self.r_e), canonical_query),
+             self._drop_relation(raw_table)])
         self._record("materialize_r_e", started)
         return self.row_count_r_e
 
@@ -133,9 +162,9 @@ class FinalResultComparator(ResultComparator):
             [self._drop_relation(self.r_h),
              self.connectionHelper.queries.create_unlogged_table_like(
                  r_h, self.get_fully_qualified_table_name(self.r_e))])
-        columns = ", ".join(f'"{col}"' for col in self._r_e_columns())
+        columns = self._r_e_columns()
         self.row_count_r_h = self._execute_rowcount(
-            self.connectionHelper.queries.insert_into_table_select_columns_from_query(
+            self.connectionHelper.queries.insert_canonical_into_table_select_columns_from_query(
                 r_h, columns, q_h))
         self._record("materialize_r_h", started)
 

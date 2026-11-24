@@ -128,15 +128,22 @@ class QueryBuilderContractTest(unittest.TestCase):
         self.assertIn("EXECUTE 'DROP TABLE fresh.r_e CASCADE';",
                       queries.drop_view_or_table_cascade("fresh", "r_e"))
         self.assertEqual(
-            "create unlogged table fresh.r_e as select 1;",
+            "create unlogged table fresh.r_e WITH (autovacuum_enabled=false) as select 1;",
             queries.create_unlogged_table_as_query("fresh.r_e", "select 1"))
         self.assertEqual(
-            "create unlogged table fresh.r_h (like fresh.r_e);",
+            "create unlogged table fresh.r_h (like fresh.r_e) WITH (autovacuum_enabled=false);",
             queries.create_unlogged_table_like("fresh.r_h", "fresh.r_e"))
         self.assertEqual(
             'insert into fresh.r_h ("c1", "c2") select "c1", "c2" from (select 1) as q;',
             queries.insert_into_table_select_columns_from_query(
                 "fresh.r_h", '"c1", "c2"', "select 1"))
+        self.assertEqual(
+            'insert into fresh.r_h ("c1", "c2") '
+            'select btrim("q"."c1"::text, E\' \\t\\n\\r\\f\\v\') AS "c1", '
+            'btrim("q"."c2"::text, E\' \\t\\n\\r\\f\\v\') AS "c2" '
+            'from (select 1) as q;',
+            queries.insert_canonical_into_table_select_columns_from_query(
+                "fresh.r_h", ["c1", "c2"], "select 1"))
         self.assertEqual(
             "select exists(select 1 from (select * from fresh.r_e except all "
             "select * from fresh.r_h) as x)::int, "
@@ -212,12 +219,23 @@ class FinalComparatorSqlTest(unittest.TestCase):
         self.assertEqual(3, comparator.create_view_from_Q_E("select * from t"))
         self.assertEqual(
             [conn.queries.set_search_path("public"),
-             conn.queries.drop_view_or_table_cascade("fresh", "r_e")],
-            conn.sql[-1])
+             conn.queries.drop_view_or_table_cascade("fresh", "r_e_raw")],
+            conn.sql[0])
         self.assertEqual(
             conn.queries.create_unlogged_table_as_query(
-                "fresh.r_e", "select * from t"),
+                "fresh.r_e_raw", "select * from t"),
             conn.cursor.executed[0])
+        self.assertEqual(
+            conn.queries.get_column_details_for_table("fresh", "r_e_raw"),
+            conn.fetchall_queries[-1])
+        self.assertEqual(
+            conn.queries.drop_view_or_table_cascade("fresh", "r_e"),
+            conn.sql[-1][0])
+        self.assertIn("btrim(", conn.sql[-1][1])
+        self.assertIn("fresh.r_e_raw", conn.sql[-1][1])
+        self.assertEqual(
+            conn.queries.drop_view_or_table_cascade("fresh", "r_e_raw"),
+            conn.sql[-1][2])
 
         comparator.create_table_from_Qh("select * from h")
         self.assertEqual(
@@ -225,9 +243,13 @@ class FinalComparatorSqlTest(unittest.TestCase):
              conn.queries.create_unlogged_table_like("fresh.r_h", "fresh.r_e")],
             conn.sql[-1])
         self.assertEqual(
-            conn.queries.insert_into_table_select_columns_from_query(
-                "fresh.r_h", '"c1", "c2"', "select * from h"),
+            conn.queries.get_column_details_for_table("fresh", "r_e"),
+            conn.fetchall_queries[-1])
+        self.assertEqual(
+            conn.queries.insert_canonical_into_table_select_columns_from_query(
+                "fresh.r_h", ["c1", "c2"], "select * from h"),
             conn.cursor.executed[1])
+        self.assertIn("btrim(", conn.cursor.executed[1])
 
         conn.fetchone_result = (1, 0)
         self.assertEqual((1, 0), comparator.run_diff_queries())
