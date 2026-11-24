@@ -112,7 +112,7 @@ Two files in the `mysite` directory control the setup:
 | `database` | Your database credentials. |
 | `support` | Support file name. The file must be in the same directory as `config.ini`. |
 | `logging` | Log level: `DEBUG` (developer mode), `INFO`, or `ERROR`. |
-| `feature` | Flags for advanced features: `UNION`, `OUTER JOIN`, `<>` / `!=` in arithmetic filter predicates, and `IN`. |
+| `feature` | Flags for advanced features: `UNION`, `OUTER JOIN`, `<>` / `!=` in arithmetic filter predicates, and `IN`. Also supports `minimizer` (valid values: `view`, `copy`, `pk`, `hybrid`; default: `view`) and `backup_method` (valid values: `native`, `threaded`, `serial`; default: `native`). |
 | `options` | Extractor options. E.g. the maximum `LIMIT` value is 1000; set `limit=value` to raise it. |
 
 ---
