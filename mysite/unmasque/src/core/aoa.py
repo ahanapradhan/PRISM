@@ -144,6 +144,11 @@ class InequalityPredicate(FilterHolder):
         self.logger.debug("E: ", E)
         for path in directed_paths:
             for i, col_src in enumerate(path):
+                # Every edge probe must start from the same minimized instance.
+                # Otherwise a failed probe can leave a column mutated and make a
+                # later edge in the same round look fixed, which makes AOA
+                # depend on chain order and leaves concrete bounds unabsorbed.
+                self.__reset_dmin_state_for_probe()
                 col_sink = path[i + 1] if i + 1 < len(path) else None
                 if col_sink is not None:
                     aoa = self.__absorb_variable_LBs(E, L, datatype, col_src, col_sink, query)
@@ -154,7 +159,7 @@ class InequalityPredicate(FilterHolder):
                 self.__extract_dormant_LBs(E, col_src, datatype, query, L)
                 self.logger.debug("after absorbing all bounds E: ", E)
 
-        self.__revert_mutation_on_filter_global_min_instance_dict()
+        self.__reset_dmin_state_for_probe()
         self.__extract_dormant_UBs(E, datatype, directed_paths, query, L)
         self.logger.debug("after full round E: ", E)
 
@@ -263,6 +268,13 @@ class InequalityPredicate(FilterHolder):
                 self.logger.debug(f"no aoa due to immutability of dmin val")
                 remove_item_from_list((col_src, col_sink), E)
 
+        if not aoa_confirm:
+            # The LB probe decides whether the edge is real. If it failed, the
+            # in-between bounds tentatively recorded by the UB probe must not be
+            # treated as absorbed, or genuine concrete bounds on the source get
+            # stripped and NEP is forced to rediscover them.
+            self.__undo_absorbtion(col_sink, col_src, prev_ub)
+
     def __absorb_variable_LBs(self, E, L, datatype, col_src, col_sink, query) -> bool:
         aoa_confirm = False
         """
@@ -326,6 +338,12 @@ class InequalityPredicate(FilterHolder):
             self.mutate_dmin_with_val(datatype, col, mutation_lb)
 
     def __extract_dormant_concrete_bound(self, E, L, col_i, datatype, query, is_UB):
+        # Once a concrete bound on this attribute has been absorbed into an AOA
+        # relation it must not be re-discovered as a dormant bound later in the
+        # same round. That was reintroducing stale bounds after disjunct search.
+        if col_i in self.__absorbed_LBs or col_i in self.__absorbed_UBs:
+            return
+        self.__reset_dmin_state_for_probe()
         b_dot = self.__mutate_with_boundary_value(E, datatype, query, col_i, is_UB)
         boundary_val = self.__what_is_possible_bound_val(E, L, col_i, datatype, is_UB)
         i_bound = get_max(self.constants_dict[datatype]) if is_UB else get_min(self.constants_dict[datatype])
@@ -511,6 +529,24 @@ class InequalityPredicate(FilterHolder):
 
     def __revert_mutation_on_filter_global_min_instance_dict(self) -> None:
         self.filter_extractor.global_min_instance_dict = copy.deepcopy(self.global_min_instance_dict)
+
+    def __reset_dmin_state_for_probe(self) -> None:
+        """Restore both the minimized instance and the working database.
+
+        ``__revert_mutation_on_filter_global_min_instance_dict`` only resets the
+        in-memory dictionary. A failed AOA probe also mutates the working
+        database, and those mutations leaked into the next edge probe. Resetting
+        both here gives every probe in a round the same starting state.
+        """
+        self.restore_d_min_from_dict()
+        g_min_dict = getattr(self.filter_extractor, 'global_min_instance_dict', None) or {}
+        d_plus = getattr(self.filter_extractor, 'global_d_plus_value', None)
+        if d_plus is None:
+            return
+        for tab, (attribs, values) in g_min_dict.items():
+            for attrib, val in zip(attribs, values):
+                d_plus[attrib] = val
+                self.global_d_plus_value[attrib] = val
 
     def __do_bound_check_again(self, tab_attrib: Tuple[str, str], datatype: str, query: str) -> list:
         joined_attribs = self.__get_equi_join_group(tab_attrib)

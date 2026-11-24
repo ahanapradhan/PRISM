@@ -156,8 +156,16 @@ class ExtractionPipeLine(DisjunctionPipeLine,
             self.time_profile.update(time_profile)
             return None
 
-        check, time_profile = self._extract_disjunction(self.aoa.arithmetic_filters,
-                                                        core_relations, query, time_profile)
+        # Disjunction probes re-run the mutation pipeline and replace the
+        # filter/AOA instances. Keep the completed AOA round so projection, NEP,
+        # and final rendering see the absorbed bounds rather than the last
+        # probe's transient state.
+        canonical_aoa_state = self.__snapshot_aoa_state()
+        try:
+            check, time_profile = self._extract_disjunction(self.aoa.arithmetic_filters,
+                                                            core_relations, query, time_profile)
+        finally:
+            self.__restore_aoa_state(canonical_aoa_state)
         if not check:
             # self.error += OK
             self.logger.error(self.error)
@@ -279,6 +287,26 @@ class ExtractionPipeLine(DisjunctionPipeLine,
 
         eq = self._extract_NEP(core_relations, self.all_sizes, query, self.genPipelineCtx)
         return eq
+
+    def __snapshot_aoa_state(self):
+        """Capture the completed AOA round before disjunction probing starts."""
+        return {
+            'aoa': self.aoa,
+            'equi_join': self.equi_join,
+            'filter_extractor': self.filter_extractor,
+            'global_min_instance_dict': copy.deepcopy(self.global_min_instance_dict),
+        }
+
+    def __restore_aoa_state(self, state):
+        """Restore the canonical AOA state and the minimized database rows."""
+        self.aoa = state['aoa']
+        self.equi_join = state['equi_join']
+        self.filter_extractor = state['filter_extractor']
+        self.global_min_instance_dict = copy.deepcopy(state['global_min_instance_dict'])
+        self.filter_extractor.global_min_instance_dict = copy.deepcopy(self.global_min_instance_dict)
+        self.aoa.filter_extractor = self.filter_extractor
+        self.aoa.global_min_instance_dict = copy.deepcopy(self.global_min_instance_dict)
+        self.aoa.restore_d_min_from_dict()
 
     def __gen_pipeline_preprocess(self, core_relations):
         self.logger.debug("aoa post-process.")
