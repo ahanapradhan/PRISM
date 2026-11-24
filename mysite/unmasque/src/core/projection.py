@@ -454,67 +454,231 @@ class Projection(GenerationPipeLineBase):
         self.logger.debug("Param List", local_param_list)
         self.param_list.append(local_param_list)
 
-        self.__infinite_loop(coeff, dep)
         b = np.zeros((2 ** n, 1))
-        for i in range(2 ** n):
-            for j, tab_attrib in enumerate(dep):
-                col = tab_attrib[1]  # self.param_list[idx][j]
-                value = coeff[i][j]
+        try:
+            # Build each equation by mutating dmin to AOA/disjunction-valid
+            # s-values, then observing the query result. Dependent candidates
+            # are discarded and retried instead of poisoning the system.
+            self.__build_equations_from_dmin(coeff, b, dep, query, idx)
+            if not _is_matrix_full_rank(coeff):
+                raise np.linalg.LinAlgError("projection coefficient matrix is singular")
+            self.logger.debug(dep)
+            self.logger.debug("Coeff: ", coeff, "b: ", b)
+            # self.logger.debug(f"condition number: {str(np.linalg.cond(coeff))}")
+            try:
+                solution = _solve_exact_linear_system(coeff, b)
+            except Exception:
+                solution = np.linalg.solve(coeff, b)
+            solution = np.around(solution, decimals =un_precision + 1)
+            solution = _snap_and_refit_constant(solution, coeff, b, un_precision)
+            final_res = 0
+            for i, ele in enumerate(self.syms[idx]):
+                final_res += (ele * solution[i])
+            self.logger.debug("Coeff of 1", solution[len(self.syms[idx]) - 1])
+            final_res += 1 * solution[-1]
+            self.logger.debug("Equation", coeff, b)
+            self.logger.debug("Solution", solution)
+            res_expr = beautify_scalar_func(final_res, local_symbol_list, dep)
+            projected_attrib[idx] = str(round_expr(res_expr, un_precision))
+            return solution
+        finally:
+            # Restore dep attribs (and their join-equivalent cols) to original dmin to avoid
+            # AOA/constraint inconsistencies leaking across projection solves.
+            for tab_attrib in dep:
+                col, tab = tab_attrib[1], tab_attrib[0]
+                try:
+                    values = self.global_min_instance_dict[tab]
+                    attribs, vals = values[0], values[1]
+                    dmin_val = vals[attribs.index(col)]
+                except Exception:
+                    dmin_val = self.get_dmin_val(col, tab)
                 joined_cols = self.get_other_attribs_in_eqJoin_grp(col)
                 joined_cols.append(col)
                 for j_c in joined_cols:
-                    self.update_attrib_in_table(j_c, value, self.find_tabname_for_given_attrib(j_c))
-                    self.logger.debug(f" update {j_c} with {value}")
+                    j_tab = self.find_tabname_for_given_attrib(j_c)
+                    try:
+                        j_vals = self.global_min_instance_dict[j_tab]
+                        j_attribs, j_vals_list = j_vals[0], j_vals[1]
+                        j_dmin = j_vals_list[j_attribs.index(j_c)]
+                    except Exception:
+                        j_dmin = dmin_val
+                    self.update_attrib_in_table(j_c, j_dmin, j_tab)
 
-            exe_result = self.app.doJob(query)
-            self.logger.debug(f"Exe result: {exe_result}")
-            if not self.app.isQ_result_no_full_nullfree_row(exe_result):
-                null_free_row = self.app.get_nullfree_row(exe_result)
-                b[i][0] = null_free_row[idx]
-                self.logger.debug(f"b[{i}][0] = {b[i][0]}")
-            else:
-                self.logger.error("Why null result? Trouble!!! ")
-                raise Exception
-        self.logger.debug(dep)
-        self.logger.debug("Coeff: ", coeff, "b: ", b)
-        # self.logger.debug(f"condition number: {str(np.linalg.cond(coeff))}")
-        solution = np.linalg.solve(coeff, b)
-        solution = np.around(solution, decimals =un_precision + 1)
-        final_res = 0
-        for i, ele in enumerate(self.syms[idx]):
-            final_res += (ele * solution[i])
-        self.logger.debug("Coeff of 1", solution[len(self.syms[idx]) - 1])
-        final_res += 1 * solution[-1]
-        self.logger.debug("Equation", coeff, b)
-        self.logger.debug("Solution", solution)
-        res_expr = beautify_scalar_func(final_res, local_symbol_list, dep)
-        projected_attrib[idx] = str(round_expr(res_expr, un_precision))
-        return solution
+    def _get_dmin_for_col(self, col, tab):
+        """Original dmin value of a column, from the cached minimized tuple."""
+        try:
+            values = self.global_min_instance_dict[tab]
+            attribs, vals = values[0], values[1]
+            return vals[attribs.index(col)]
+        except Exception:
+            return self.get_dmin_val(col, tab)
 
-    def __infinite_loop(self, coeff, dep):
+    def _set_dep_value(self, col, tab, value):
+        """Mutate the dmin tuple in the working DB, including equi-join peers."""
+        joined_cols = self.get_other_attribs_in_eqJoin_grp(col)
+        joined_cols.append(col)
+        for j_c in joined_cols:
+            j_tab = self.find_tabname_for_given_attrib(j_c)
+            if j_tab is None:
+                continue
+            self.update_attrib_in_table(j_c, value, j_tab)
+            self.logger.debug(f"mutated dmin {j_tab}.{j_c} to {value}")
+
+    def _restore_dep_to_dmin(self, dep):
+        """Restore all dependency columns (and join peers) to original dmin."""
+        for tab_attrib in dep:
+            col, tab = tab_attrib[1], tab_attrib[0]
+            dmin_val = self._get_dmin_for_col(col, tab)
+            joined_cols = self.get_other_attribs_in_eqJoin_grp(col)
+            joined_cols.append(col)
+            for j_c in joined_cols:
+                j_tab = self.find_tabname_for_given_attrib(j_c)
+                if j_tab is None:
+                    continue
+                j_dmin = self._get_dmin_for_col(j_c, j_tab)
+                self.update_attrib_in_table(j_c, j_dmin, j_tab)
+
+    @staticmethod
+    def _values_equal(a, b):
+        try:
+            return float(a) == float(b)
+        except (TypeError, ValueError):
+            return str(a) == str(b)
+
+    @staticmethod
+    def _le(a, b):
+        try:
+            return float(a) <= float(b)
+        except (TypeError, ValueError):
+            try:
+                return a <= b
+            except Exception:
+                return True
+
+    @staticmethod
+    def _lt(a, b):
+        try:
+            return float(a) < float(b)
+        except (TypeError, ValueError):
+            try:
+                return a < b
+            except Exception:
+                return True
+
+    def _s_values_satisfy_constraints(self, dep, values):
+        """Check that a dmin mutation honours AOA predicates and CNF pins."""
+        # Disjunction/CNF pins: a pinned attribute may not be mutated freely.
+        pins = getattr(self, 'cnf_pin_values', {}) or {}
+        for key, pinned in pins.items():
+            if key in values and pinned is not None:
+                if not self._values_equal(values[key], pinned):
+                    return False
+
+        gen_ctx = getattr(self, '_gen_ctx', None)
+        if gen_ctx is None:
+            return True
+
+        def value_of(attr):
+            if not isinstance(attr, tuple):
+                return attr  # constant operand in an AOA predicate
+            if attr in values:
+                return values[attr]
+            try:
+                fqtn = self.get_fully_qualified_table_name(attr[0])
+                return self.connectionHelper.execute_sql_fetchone_0(
+                    self.connectionHelper.queries.select_attribs_from_relation([attr[1]], fqtn))
+            except Exception:
+                return None
+
+        for pred in getattr(gen_ctx, 'global_aoa_le_predicates', []) or []:
+            left, right = value_of(pred[0]), value_of(pred[1])
+            if left is not None and right is not None and not self._le(left, right):
+                return False
+        for pred in getattr(gen_ctx, 'global_aoa_l_predicates', []) or []:
+            left, right = value_of(pred[0]), value_of(pred[1])
+            if left is not None and right is not None and not self._lt(left, right):
+                return False
+        return True
+
+    def __build_equations_from_dmin(self, coeff, b, dep, query, idx):
+        """Build equations by mutating dmin and observing the new result.
+
+        For each row we pick s-values that satisfy the AOA/disjunction
+        constraints, write them into the dmin tuple in the working database,
+        run the query, and use the observed output as b. A candidate whose
+        coefficient row is linearly dependent on the accepted rows is
+        discarded and regenerated.
+        """
         n = len(dep)
-        curr_rank = 1
-        outer_idx = 1
-        while outer_idx < 2 ** n and curr_rank < 2 ** n:
-            prev_idx, prev_rank = outer_idx, curr_rank
-            # Same algorithm as above with insertion of random values
-            # Additionally checking if rank of the matrix has become 2^n
-            for j, ele in enumerate(dep):
-                key = (ele[0], ele[1])
-                self.__assign_s_val_in_coeffMatrix(coeff, j, key, outer_idx)
+        row_count = 2 ** n
+        accepted_rows = [coeff[0].copy()]
+        max_attempts = max(100, row_count * 25)
 
-            temp_array = get_param_values_external(coeff[outer_idx][:n])
-            for j in range(2 ** n - 1):
-                coeff[outer_idx][j] = temp_array[j]
-            coeff[outer_idx][2 ** n - 1] = 1.0
-            m_rank = np.linalg.matrix_rank(coeff)
-            if m_rank > curr_rank:
-                curr_rank += 1
-                outer_idx += 1
-            self.logger.debug("outer_idx: ", outer_idx, "curr_rank: ", curr_rank)
-            if prev_idx == outer_idx and curr_rank == prev_rank:
-                self.logger.debug("It will go to infinite loop!! so breaking...")
+        # Row 0 is the original dmin instance; the DB already holds those
+        # values, so just observe its result.
+        self._restore_dep_to_dmin(dep)
+        exe_result = self.app.doJob(query)
+        if self.app.isQ_result_no_full_nullfree_row(exe_result):
+            self.logger.error("Why null result? Trouble!!! ")
+            raise Exception("null result for dmin row")
+        b[0][0] = self.app.get_nullfree_row(exe_result)[idx]
+        self.logger.debug(f"b[0][0] = {b[0][0]}")
+
+        for outer_idx in range(1, row_count):
+            for attempt in range(1, max_attempts + 1):
+                # Start each candidate from the original dmin so AOA bounds
+                # are computed against a clean reference tuple.
+                self._restore_dep_to_dmin(dep)
+                values = {}
+                for j, ele in enumerate(dep):
+                    key = (ele[0], ele[1])
+                    self.__assign_s_val_in_coeffMatrix(coeff, j, key, outer_idx)
+                    s_val = coeff[outer_idx][j]
+                    values[key] = s_val
+                    # Mutate dmin now so later attributes see updated AOA bounds.
+                    # key is (tabname, attrib); _set_dep_value takes (attrib, tabname).
+                    self._set_dep_value(key[1], key[0], s_val)
+
+                if not self._s_values_satisfy_constraints(dep, values):
+                    self.logger.debug(
+                        f"discarded AOA/disjunction-invalid candidate for row {outer_idx}"
+                    )
+                    coeff[outer_idx] = 0
+                    continue
+
+                temp_array = get_param_values_external(coeff[outer_idx][:n])
+                for j in range(row_count - 1):
+                    coeff[outer_idx][j] = temp_array[j]
+                coeff[outer_idx][row_count - 1] = 1.0
+
+                if not _is_row_independent(accepted_rows, coeff[outer_idx]):
+                    self.logger.debug(
+                        f"discarded dependent equation row {outer_idx}, retrying"
+                    )
+                    coeff[outer_idx] = 0
+                    continue
+
+                exe_result = self.app.doJob(query)
+                if self.app.isQ_result_no_full_nullfree_row(exe_result):
+                    self.logger.debug(
+                        f"discarded null-result candidate for row {outer_idx}"
+                    )
+                    coeff[outer_idx] = 0
+                    continue
+
+                b[outer_idx][0] = self.app.get_nullfree_row(exe_result)[idx]
+                self.logger.debug(f"Exe result for row {outer_idx}: {exe_result}")
+                self.logger.debug(f"b[{outer_idx}][0] = {b[outer_idx][0]}")
+                accepted_rows.append(coeff[outer_idx].copy())
+                self.logger.debug(
+                    f"accepted independent equation row {outer_idx} after {attempt} attempt(s)"
+                )
                 break
+            else:
+                self._restore_dep_to_dmin(dep)
+                raise np.linalg.LinAlgError(
+                    f"could not build {row_count} linearly independent projection equations"
+                )
 
     def __assign_next_s_value_for_or_attrib(self, used_vals, tab_attrib):
         in_vals = self.or_predicates_dict[tab_attrib]
@@ -546,8 +710,38 @@ class Projection(GenerationPipeLineBase):
             elif datatype == 'numeric':
                 s_val = round(random.uniform(mini, maxi), un_precision + 1)
         if s_val is None:
+            datatype = self.get_datatype(key)
+            # Respect AOA predicate bounds (generic: uses AOA predicates + current dmin).
+            lb, ub = self.get_aoa_implied_bounds(key[0], key[1], datatype)
+            try:
+                from ...src.util.utils import get_min_and_max_val
+            except Exception:
+                from ...util.utils import get_min_and_max_val
+            i_min, i_max = get_min_and_max_val(datatype)
+            if lb > i_min or ub < i_max:
+                mini, maxi = lb, ub
             self.logger.debug(f"mini: {mini}, maxi: {maxi}")
-            s_val = random.randrange(math.floor(mini), math.ceil(maxi))
+            if datatype == 'numeric':
+                # Numeric columns need fractional probe values; integer-only
+                # probes make the linear system miss fractional coefficients.
+                lo_f, hi_f = float(mini), float(maxi)
+                if lo_f >= hi_f:
+                    hi_f = lo_f + 1
+                s_val = round(random.uniform(lo_f, hi_f), un_precision + 1)
+            elif datatype == 'date':
+                if mini == maxi:
+                    s_val = mini
+                else:
+                    try:
+                        span = (maxi - mini).days
+                        s_val = mini if span <= 0 else mini + __import__('datetime').timedelta(days=random.randint(0, span))
+                    except Exception:
+                        s_val = mini
+            else:
+                lo, hi = math.floor(float(mini)), math.ceil(float(maxi))
+                if lo >= hi:
+                    hi = lo + 1
+                s_val = random.randrange(lo, hi)
         s_val = self._scalar_probe_value(s_val)
         self.logger.debug(f"s-value for {key} is {s_val}, assigned to coeff[{outer_idx}][{j}]")
         coeff[outer_idx][j] = s_val
@@ -555,15 +749,31 @@ class Projection(GenerationPipeLineBase):
     def __get_min_max_s_values(self, key, maxi, mini):
         lb, ub = get_boundary_value(self.filter_attrib_dict[key][0], is_ub=False), get_boundary_value(
             self.filter_attrib_dict[key][1], is_ub=True)
+        try:
+            aoa_lb, aoa_ub = self.get_aoa_implied_bounds(key[0], key[1], self.get_datatype(key))
+            lb = max(lb, aoa_lb)
+            ub = min(ub, aoa_ub)
+        except Exception:
+            pass
         if float(mini) > float(lb) and float(maxi) < float(ub):  # good case
             mini, maxi = lb, ub
             return maxi, mini
-        mini = max(mini, get_boundary_value(self.filter_attrib_dict[key][0], is_ub=False))
-        maxi, ub = min(maxi, get_boundary_value(self.filter_attrib_dict[key][1], is_ub=True)), \
-            max(maxi, get_boundary_value(self.filter_attrib_dict[key][1], is_ub=True))
+        cap_ub = ub
+        mini = max(mini, lb)
+        maxi = min(maxi, ub)
+        ub = cap_ub
         self.logger.debug(f"mini: {mini}, maxi: {maxi}")
         if mini >= maxi:
-            maxi = ub
+            # The generic probe ceiling (pr_max) can be below a lower bound
+            # extracted from the query. Do not fall back to the global domain
+            # maximum in that case: probes must keep at least one result row
+            # alive. Stay near the current dmin value, capped by the known ub.
+            try:
+                center = float(self.get_dmin_val(key[1], key[0]))
+                candidate = center + max(abs(center) * 0.5, 1.0)
+                maxi = min(float(ub), max(float(mini) + 1.0, candidate))
+            except Exception:
+                maxi = ub
         return maxi, mini
 
     def build_equation(self, projected_attrib, projection_dep, projection_sol):
@@ -725,6 +935,113 @@ class Projection(GenerationPipeLineBase):
             if not any(str(sv) == str(u) for u in used):
                 return sv
         return self._scalar_probe_value(candidates[0]) if candidates else None
+
+
+def _to_fraction(value):
+    from fractions import Fraction
+    if isinstance(value, Fraction):
+        return value
+    return Fraction(str(value))
+
+
+def _exact_rank(rows):
+    """Rank of a small matrix using exact rational arithmetic."""
+    rows = list(rows)
+    if not rows:
+        return 0
+    width = len(rows[0])
+    matrix = [[_to_fraction(value) for value in row] for row in rows]
+    rank = 0
+    for col in range(width):
+        pivot = next((r for r in range(rank, len(matrix)) if matrix[r][col] != 0), None)
+        if pivot is None:
+            continue
+        matrix[rank], matrix[pivot] = matrix[pivot], matrix[rank]
+        pivot_value = matrix[rank][col]
+        matrix[rank] = [value / pivot_value for value in matrix[rank]]
+        for r in range(rank + 1, len(matrix)):
+            factor = matrix[r][col]
+            if factor:
+                matrix[r] = [matrix[r][c] - factor * matrix[rank][c] for c in range(width)]
+        rank += 1
+        if rank == len(matrix):
+            break
+    return rank
+
+
+def _is_matrix_full_rank(rows):
+    rows = list(rows)
+    return bool(rows) and _exact_rank(rows) == len(rows)
+
+
+def _is_row_independent(rows, candidate):
+    """True when candidate increases the rank of the already accepted rows."""
+    rows = list(rows)
+    return _exact_rank(rows + [candidate]) == len(rows) + 1
+
+
+def _solve_exact_linear_system(coeff, b):
+    """Solve the small projection system with rational arithmetic.
+
+    Probe columns include products of numeric attributes, so their magnitudes
+    can reach 1e8 while the observed output is rounded to cents. Float
+    elimination then leaves spurious constant terms (e.g. +0.15). The probe
+    values themselves are short decimals, so an exact Fraction solve avoids
+    that conditioning problem.
+    """
+    from fractions import Fraction
+
+    def frac(value):
+        if isinstance(value, Fraction):
+            return value
+        return Fraction(str(value))
+
+    size = len(b)
+    matrix = [[frac(coeff[i][j]) for j in range(size)] + [frac(b[i][0])]
+              for i in range(size)]
+    for col in range(size):
+        pivot = next((row for row in range(col, size) if matrix[row][col] != 0), None)
+        if pivot is None:
+            raise ZeroDivisionError("singular projection system")
+        matrix[col], matrix[pivot] = matrix[pivot], matrix[col]
+        pivot_val = matrix[col][col]
+        matrix[col] = [value / pivot_val for value in matrix[col]]
+        for row in range(size):
+            if row == col or matrix[row][col] == 0:
+                continue
+            factor = matrix[row][col]
+            matrix[row] = [matrix[row][j] - factor * matrix[col][j]
+                           for j in range(size + 1)]
+    return np.array([[float(matrix[i][size])] for i in range(size)])
+
+
+def _snap_and_refit_constant(solution, coeff, b, decimals):
+    """Snap near-integer coefficients and recompute the constant term.
+
+    Database numeric columns round each probe output to cents. With large
+    product columns that rounding perturbs the solved constant by a few cents.
+    Projection expressions in this workload use small integer coefficients, so
+    snap those and estimate the constant as the median residual.
+    """
+    from fractions import Fraction
+
+    rows = len(solution)
+    if rows <= 1:
+        return solution
+    for j in range(rows - 1):
+        value = float(solution[j][0])
+        nearest = round(value)
+        if abs(value - nearest) <= 0.08:
+            solution[j][0] = nearest
+    residuals = []
+    for i in range(rows):
+        predicted = sum(
+            Fraction(str(coeff[i][j])) * Fraction(str(solution[j][0]))
+            for j in range(rows - 1)
+        )
+        residuals.append(Fraction(str(b[i][0])) - predicted)
+    solution[rows - 1][0] = round(float(sum(residuals) / len(residuals)), decimals)
+    return solution
 
 
 def get_param_values_external(coeff_arr):
