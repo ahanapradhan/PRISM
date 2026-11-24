@@ -1,3 +1,4 @@
+import argparse
 import signal
 import sys
 import traceback
@@ -28,6 +29,16 @@ class TestQuery:
         self.nep = nep
         self.query = hidden_query
         self.orf = orf if orf is not None else False
+
+    @classmethod
+    def print(cls, qid):
+        for test_query in build_workload():
+            if test_query.qid == qid:
+                print(test_query.query)
+                return
+        print(f"Unknown query id: {qid}", file=sys.stderr)
+        sys.exit(2)
+
 
 def create_workload():
     test_workload = [TestQuery("U1", """(SELECT p_partkey, p_name FROM part, partsupp where p_partkey = ps_partkey and ps_availqty > 100
@@ -1163,6 +1174,16 @@ UNION ALL
     return workload
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Extract a hidden query from PRISM's workload.")
+    parser.add_argument('qid', help="query id to run")
+    parser.add_argument('--print', action='store_true', help="print the query text and exit")
+    args = parser.parse_args()
+
+    qid = args.qid
+    if args.print:
+        TestQuery.print(qid)
+        sys.exit(0)
+
     workload = build_workload()
 
     workload_dict = {elem.qid: i for i, elem in enumerate(workload)}
@@ -1170,7 +1191,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-    qid = sys.argv[1]
     if qid not in workload_dict:
         print(f"Unknown query id: {qid}")
         sys.exit(2)
