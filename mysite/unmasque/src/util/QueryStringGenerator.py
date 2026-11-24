@@ -198,6 +198,7 @@ class QueryStringGenerator:
     @algebraic_predicates.setter
     def algebraic_predicates(self, aoa):
         self._workingCopy.eq_join_predicates = aoa.algebraic_eq_predicates
+        self._workingCopy.join_edges = []
         for pred in aoa.aoa_less_thans:
             self._workingCopy.all_aoa.append((pred[0], '<', pred[1]))
         for pred in aoa.aoa_predicates:
