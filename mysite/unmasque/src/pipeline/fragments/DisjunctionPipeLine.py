@@ -100,7 +100,13 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         self.update_state(SAMPLING + RUNNING)
         check = cs2.doJob(query)
         self.update_state(SAMPLING + DONE)
-        time_profile.update_for_cs2(cs2.local_elapsed_time, cs2.app_calls)
+        # The extractor still runs its (disabled) no-op wrapper even when CS2 is
+        # off, so only attribute the elapsed time to correlated sampling when
+        # the feature is actually enabled. Otherwise the few overhead slices
+        # from repeated OR probes accumulate in t_correlated_sampling even
+        # though no sampling work happened; they remain in t_total only.
+        if self.connectionHelper.config.use_cs2:
+            time_profile.update_for_cs2(cs2.local_elapsed_time, cs2.app_calls)
         if not check or not cs2.done:
             self.info[SAMPLING] = None
             self.logger.info("Sampling failed!")
@@ -153,7 +159,7 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         if not self.filter_extractor.done:
             self.update_state(ERROR)
             self.info[FILTER] = None
-            self.error = check if check else self.error_string
+            self.error = "" if check else (self.error_string or "")
             self.logger.error(self.error)
             return False, time_profile
         if not check:
@@ -174,7 +180,7 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
         if not self.equi_join.done:
             self.update_state(ERROR)
             self.info[EQUALITY] = None
-            self.error = check if check else self.error_string
+            self.error = "" if check else (self.error_string or "")
             self.logger.error(self.error)
             return False, time_profile
         if not check:
@@ -201,7 +207,7 @@ class DisjunctionPipeLine(GenericPipeLine, ABC):
             self.logger.info("Cannot find inequality Predicates.")
         if not self.aoa.done:
             self.info[INEQUALITY] = None
-            self.error = check if check else self.error_string
+            self.error = "" if check else (self.error_string or "")
             self.logger.error(self.error)
             self.update_state(ERROR)
             return False, time_profile

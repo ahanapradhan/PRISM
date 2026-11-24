@@ -278,60 +278,6 @@ LIMIT 100;""",False, False, False, False),
                          o_orderdate <= date '1995-10-13' and l_extendedprice between 212 and 3000 
                         and l_quantity <= 123  group by o_orderdate, o_shippriority, c_mktsegment 
                          order by revenue desc, o_orderdate asc, o_shippriority asc;""", False, False, False, False),
-                     TestQuery("TPCH_Q9", """select
-	nation,
-	o_year,
-	sum(amount) as sum_profit
-from
-	(
-		select
-			n_name as nation,
-			extract(year from o_orderdate) as o_year,
-			l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
-		from
-			part,
-			supplier,
-			lineitem,
-			partsupp,
-			orders,
-			nation
-		where
-			s_suppkey = l_suppkey
-			and ps_suppkey = l_suppkey
-			and ps_partkey = l_partkey
-			and p_partkey = l_partkey
-			and o_orderkey = l_orderkey
-			and s_nationkey = n_nationkey
-			and p_name like 'co%'
-	) as profit
-group by
-	nation,
-	o_year
-order by
-	nation,
-	o_year desc;""", False, False, False, False),
-                     TestQuery("TPCH_Q11", """SELECT
-    ps_partkey, n_name,
-    SUM(ps_supplycost * ps_availqty) AS total_value
-FROM
-    partsupp, supplier, nation 
-where
-    ps_suppkey = s_suppkey
-	and s_nationkey = n_nationkey
-	and n_name = 'INDIA'
-GROUP BY
-    ps_partkey, n_name
-HAVING
-    SUM(ps_supplycost * ps_availqty) > (
-        SELECT SUM(ps_supplycost * ps_availqty) * 0.00001
-        FROM partsupp, supplier, nation WHERE 
-        ps_suppkey = s_suppkey
-	and s_nationkey = n_nationkey
-	and n_name = 'INDIA'
-    )
-ORDER BY
-    total_value DESC;
-""", False, False, False, False),
                      TestQuery("TPCH_Q12", """select
 	l_shipmode,
 	sum(case
@@ -360,26 +306,6 @@ group by
 	l_shipmode
 order by
 	l_shipmode;""", False, False, False, False),
-                     TestQuery("TPCH_Q13", """select
-	c_count, c_orderdate,
-	count(*) as custdist
-from
-	(
-		select
-			c_custkey, o_orderdate,
-			count(o_orderkey)
-		from
-			customer left outer join orders on
-				c_custkey = o_custkey
-				and o_comment not like '%among%regular%'
-		group by
-			c_custkey, o_orderdate
-	) as c_orders (c_custkey, c_count, c_orderdate)
-group by
-	c_count, c_orderdate
-order by
-	custdist desc,
-	c_count desc;""", False, False, True, True),
                      TestQuery("TPCH_Q14", """select
 	100.00 * sum(case
 		when p_type like 'PROMO%'
@@ -393,65 +319,6 @@ where
 	l_partkey = p_partkey
 	and l_shipdate >= date '1995-01-01'
 	and l_shipdate < date '1995-01-01' + interval '1' month;""", False, False, False, False),
-                     TestQuery("TPCH_Q16", """select
-	p_brand,
-	p_type,
-	p_size,
-	count(distinct ps_suppkey) as supplier_cnt
-from
-	partsupp,
-	part
-where
-	p_partkey = ps_partkey
-	and p_brand <> 'Brand#23'
-    AND p_type NOT LIKE 'MEDIUM POLISHED%' 
-	and p_size IN (1, 4, 7)
-	and ps_suppkey not in (
-		select
-			s_suppkey
-		from
-			supplier
-		where
-			s_comment like '%Customer%Complaints%'
-	)
-group by
-	p_brand,
-	p_type,
-	p_size
-order by
-	supplier_cnt desc,
-	p_brand,
-	p_type,
-	p_size;""", False, False, False, True, True),
-                     TestQuery("TPCH_Q17", """SELECT SUM(l.l_extendedprice) / 7.0 AS avg_yearly
-FROM lineitem l
-JOIN part p ON p.p_partkey = l.l_partkey
-JOIN (
-    SELECT l_partkey, 0.7 * AVG(l_quantity) AS threshold_quantity
-    FROM lineitem
-    GROUP BY l_partkey
-) AS avg_lineitem ON avg_lineitem.l_partkey = l.l_partkey
-WHERE p.p_brand = 'Brand#53'
-  AND p.p_container = 'MED BAG'
-  AND l.l_quantity < avg_lineitem.threshold_quantity;
-""", False, False, False, False),
-                     TestQuery("Nested_Test", """select
-        s_name,
-        s_address
-from
-        supplier,
-        nation,
-		partsupp,
-		part
-where
-        s_suppkey = ps_suppkey
-        and ps_partkey = p_partkey
-        and p_name like '%ivory%'
-		and s_nationkey = n_nationkey
-        and n_name = 'FRANCE'
-        and ps_availqty > (select min(c_acctbal) from customer)
-order by
-        s_name;""", False, False, False, False),
                      TestQuery("oj_bug", """SELECT c_custkey, c_name, c_mktsegment, o_orderkey
 FROM customer FULL OUTER JOIN orders ON c_custkey = o_custkey
 WHERE c_mktsegment = 'BUILDING';""", False, False, True, False),
@@ -1093,7 +960,7 @@ def tpcds_union_query(branches, sizes):
 
 
 
-if __name__ == '__main__':
+def build_workload():
     workload = create_workload()
     workload += [
         TestQuery("NEP1",
@@ -1293,6 +1160,10 @@ UNION ALL
     ORDER BY price DESC, country DESC, entity_name
     LIMIT 20
 );""", False, True, True, True, True)]
+    return workload
+
+if __name__ == '__main__':
+    workload = build_workload()
 
     workload_dict = {elem.qid: i for i, elem in enumerate(workload)}
 

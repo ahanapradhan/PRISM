@@ -89,7 +89,7 @@ class GenericPipeLine(ABC):
             e.report_to_logger(self.logger)
             return self.error
         except Exception as e:
-            self.error += str(e)
+            self.error = f"{self.error}{e}"
             self.logger.error(self.error)
             self.update_state(ERROR)
             return self.error
