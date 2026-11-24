@@ -202,7 +202,7 @@ class Aggregation(GenerationPipeLineBase):
                                 self.logger.debug(self.dependencies, result_index,
                                                   key_list, tabname, temp_vals, result_index)
 
-                            if len(self.solution[result_index]) > 1:
+                            if self.solution[result_index]:
                                 if debug_enabled:
                                     self.logger.debug("Temp values", temp_vals)  # FOR DEBUG
                                 s = 0
@@ -224,28 +224,44 @@ class Aggregation(GenerationPipeLineBase):
                                     if len(temp_ar[t][1]) < max_no_of_rows:
                                         temp_ar[t][1].extend(
                                             [temp_ar[t][1][0]] * (max_no_of_rows - len(temp_ar[t][1])))
-                                for _row in range(max_no_of_rows):
-                                    inter_val = [float(temp_ar[j][1][_row])
-                                                 for j in range(len(self.dependencies[result_index]))]
-
-                                    temp_arr = get_param_values_external(inter_val)
-                                    if debug_enabled:
-                                        self.logger.debug("Coeffs", temp_arr, local_sol)  # FOR DEBUG
-                                    inter_val = list(temp_arr) + [1]
-                                    if debug_enabled:
-                                        self.logger.debug("Intermediate Values of all", inter_val)  # FOR DEBUG
-                                    eqn = sum(val * local_sol[j][0] for j, val in enumerate(inter_val))
-                                    # print("Expression", eqn) # FOR DEBUG
-                                    s += eqn
-                                    mi = min(mi, eqn)
-                                    ma = max(ma, eqn)
+                                is_numeric = True
+                                try:
+                                    probe_values = [[float(temp_ar[j][1][_row])
+                                                     for j in range(len(self.dependencies[result_index]))]
+                                                    for _row in range(max_no_of_rows)]
+                                except (TypeError, ValueError):
+                                    is_numeric = False
+                                    probe_values = [[str(temp_ar[j][1][_row])
+                                                     for j in range(len(self.dependencies[result_index]))]
+                                                    for _row in range(max_no_of_rows)]
+                                eqn_values = []
+                                for inter_val in probe_values:
+                                    if is_numeric:
+                                        temp_arr = get_param_values_external(inter_val)
+                                        if debug_enabled:
+                                            self.logger.debug("Coeffs", temp_arr, local_sol)  # FOR DEBUG
+                                        inter_val = list(temp_arr) + [1]
+                                        eqn = sum(val * local_sol[j][0]
+                                                  for j, val in enumerate(inter_val[:len(local_sol)]))
+                                    else:
+                                        eqn = inter_val[0]
+                                    eqn_values.append(eqn)
+                                    s += eqn if is_numeric else 0
+                                    if is_numeric:
+                                        mi = min(mi, eqn)
+                                        ma = max(ma, eqn)
+                                if not is_numeric:
+                                    mi, ma = min(eqn_values), max(eqn_values)
                                 if debug_enabled:
                                     self.logger.debug("no_of_rows ", max_no_of_rows)
-                                av = (s / max_no_of_rows)
+                                av = (s / max_no_of_rows) if max_no_of_rows else 0
                                 if debug_enabled:
                                     self.logger.debug("Temp Array", temp_ar)
                                     self.logger.debug("SUM, AVG, MIN, MAX", s, av, mi, ma)
-                                agg_array = [SUM, s, AVG, av, MIN, mi, MAX, ma, COUNT, max_no_of_rows]
+                                if is_numeric:
+                                    agg_array = [SUM, s, AVG, av, MIN, mi, MAX, ma, COUNT, max_no_of_rows]
+                                else:
+                                    agg_array = [MIN, mi, MAX, ma]
                             new_result = self.app.doJob(query)
                             if debug_enabled:
                                 self.logger.debug("New Result", new_result)  # FOR DEBUG
