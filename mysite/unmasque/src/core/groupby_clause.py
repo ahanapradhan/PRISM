@@ -1,16 +1,11 @@
 import ast
 import copy
 
-from frozenlist._frozenlist import FrozenList
-
 from .dataclass.genPipeline_context import GenPipelineContext
-from ..util.error_codes import ERROR_005
-from ..util.error_handling import UnmasqueError
-
-from ...src.core.abstract.GenerationPipeLineBase import GenerationPipeLineBase, get_boundary_value
+from ...src.core.abstract.GenerationPipeLineBase import GenerationPipeLineBase
 from ...src.core.abstract.abstractConnection import AbstractConnectionHelper
 from ...src.util.utils import get_dummy_val_for, get_val_plus_delta, get_format, get_char
-from ..util.constants import COUNT_THERE, CONST_1_THERE, CONST_1_VALUE, NUMBER_TYPES, NON_TEXT_TYPES
+from ..util.constants import COUNT_THERE, CONST_1_THERE, CONST_1_VALUE, NON_TEXT_TYPES
 
 
 def has_attrib_key_condition(attrib, attrib_inner, key_list):
@@ -156,16 +151,11 @@ class GroupBy(GenerationPipeLineBase):
 
     def get_insert_value_for_single_attrib(self, datatype, attrib_inner, tabname_inner):
         # B13 (guarded): prefer CNF route-pinned value for non-varying attributes.
-        if hasattr(self, 'get_cnf_pinned_or_none'):
-            pinned = self.get_cnf_pinned_or_none(tabname_inner, attrib_inner)
-            if pinned is not None:
-                return pinned
-        if (tabname_inner, attrib_inner) in self.filter_attrib_dict.keys():
-            val = self.filter_attrib_dict[(tabname_inner, attrib_inner)][0]
-            val = get_boundary_value(val, is_ub=False)
-        else:
-            val = get_dummy_val_for(datatype)
-        return val
+        pinned = self.get_cnf_pinned_or_none(tabname_inner, attrib_inner)
+        if pinned is not None:
+            return pinned
+        return self.get_s_value_within_bounds(tabname_inner, attrib_inner, datatype=datatype,
+                                              prefer='lb')
 
     def get_insert_value_for_joined_attribs(self, datatype, attrib_inner, delta, tabname_inner):
         self.logger.debug(tabname_inner, attrib_inner)
@@ -175,10 +165,8 @@ class GroupBy(GenerationPipeLineBase):
             if cnf_val is not None:
                 self.logger.debug(cnf_val)
                 return cnf_val
-        if key in self.filter_attrib_dict.keys():
-            val = self.__get_s_plus_k_val(attrib_inner, datatype, delta, tabname_inner)
-        else:
-            val = get_val_plus_delta(datatype, get_dummy_val_for(datatype), delta)
+        val = self.get_s_value_plus_delta_within_bounds(tabname_inner, attrib_inner,
+                                                        datatype, delta)
         self.logger.debug(val)
         return val
 
@@ -217,42 +205,6 @@ class GroupBy(GenerationPipeLineBase):
             return None
         # free domain: let legacy/default logic decide
         return None
-
-    def __get_s_plus_k_val(self, attrib_inner, datatype, delta, tabname_inner):
-        if isinstance(self.filter_attrib_dict[(tabname_inner, attrib_inner)], tuple):  # range
-            zero_val = self.filter_attrib_dict[(tabname_inner, attrib_inner)][0]
-            zero_val = get_val_plus_delta(datatype, zero_val, delta)
-            one_val = self.filter_attrib_dict[(tabname_inner, attrib_inner)][1]
-            val = min(zero_val, one_val)
-        elif isinstance(self.filter_attrib_dict[(tabname_inner, attrib_inner)], FrozenList):  # IN
-            zero_val = self.filter_attrib_dict[(tabname_inner, attrib_inner)][0]
-            i = 0
-            while i <= delta:
-                zero_val = self.filter_attrib_dict[(tabname_inner, attrib_inner)][i]
-                if not isinstance(zero_val, tuple):
-                    i += 1
-                    continue
-                else:
-                    zero_val, zone_val = zero_val[0], zero_val[-1]
-                    left = delta - i
-                    if datatype == 'date':
-                        gap = (zone_val - zero_val).days
-                    elif datatype in NUMBER_TYPES:
-                        gap = zone_val - zero_val
-                    else:
-                        self.logger.debug(f"Datatype '{datatype}' is not supported.")
-                        raise UnmasqueError(ERROR_005, "groupby_clause", f"Datatype '{datatype}' is not supported.")
-                    if gap >= left:
-                        zero_val = get_val_plus_delta(datatype, zero_val, left)
-                        break
-                    else:
-                        i = left - gap
-            one_val = self.filter_attrib_dict[(tabname_inner, attrib_inner)][-1]
-            one_val = get_boundary_value(one_val, is_ub=True)
-            val = min(zero_val, one_val)
-        else:  # =
-            val = self.filter_attrib_dict[(tabname_inner, attrib_inner)]
-        return val
 
     def remove_duplicates(self):
         to_remove = []

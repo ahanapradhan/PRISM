@@ -8,8 +8,10 @@ from frozenlist._frozenlist import FrozenList
 
 from .MutationPipeLineBase import MutationPipeLineBase
 from ..dataclass.genPipeline_context import GenPipelineContext
-from ...util.constants import NON_TEXT_TYPES
-from ...util.utils import get_unused_dummy_val, get_dummy_val_for, get_format, get_char, get_escape_string
+from ...util.constants import NON_TEXT_TYPES, NUMERIC_TYPES
+from ...util.utils import (get_unused_dummy_val, get_dummy_val_for, get_format, get_char,
+                           get_escape_string, get_min_and_max_val, get_val_plus_delta)
+from ...util.aoa_utils import get_constants_for
 from ....src.core.abstract.abstractConnection import AbstractConnectionHelper
 
 
@@ -153,9 +155,9 @@ class GenerationPipeLineBase(MutationPipeLineBase):
             return pinned
         datatype = self.get_datatype((tabname, attrib))
         if datatype in NON_TEXT_TYPES:
-            if (tabname, attrib) in self.filter_attrib_dict.keys():
-                lb = self.filter_attrib_dict[(tabname, attrib)][0]
-                val = get_boundary_value(lb, is_ub=False)
+            if self.has_probe_bounds(tabname, attrib, datatype):
+                val = self.get_s_value_within_bounds(tabname, attrib, datatype=datatype,
+                                                     prefer='lb')
             else:
                 val = get_dummy_val_for(datatype)
             # val = ast.literal_eval(get_format(datatype, val))
@@ -171,41 +173,47 @@ class GenerationPipeLineBase(MutationPipeLineBase):
     def get_other_than_dmin_val_nonText(self, attrib: str, tabname: str, prev) -> Union[int, float, date, str]:
         key = (tabname, attrib)
         datatype = self.get_datatype(key)
-        if key not in self.filter_attrib_dict:
+        if not self.has_probe_bounds(tabname, attrib, datatype):
             return get_dummy_val_for(datatype)
 
-        if len(self.filter_attrib_dict[key]) == 1:
+        lb, ub = self.get_effective_bounds(tabname, attrib, datatype)
+        if lb == ub:
             self.logger.info("Cannot generate a new s-val. Giving the old one!")
             return prev
-
-        lb, ub = self.filter_attrib_dict[key][0], self.filter_attrib_dict[key][-1]
-        lb = get_boundary_value(lb, is_ub=False)
-        ub = get_boundary_value(ub, is_ub=True)
-        # A filter bound may be a generic domain extreme when the real bound is
-        # encoded as an AOA predicate. Intersect with AOA-implied bounds so the
-        # probe does not eliminate every result row.
-        try:
-            aoa_lb, aoa_ub = self.get_aoa_implied_bounds(tabname, attrib, datatype)
-            lb = max(lb, aoa_lb)
-            ub = min(ub, aoa_ub)
-        except Exception:
-            pass
         val = ub if prev == lb else lb
         if val == prev:
-            val = ub if lb != ub else prev
+            val = ub
         return val
 
     def get_aoa_implied_bounds(self, tabname: str, attrib: str, datatype: str):
-        """Return (lb, ub) implied by AOA predicates for (tabname, attrib), using current dmin values."""
-        from ...util.utils import get_min_and_max_val
+        """Return (lb, ub) implied by every AOA-derived bound on an attribute.
+
+        A concrete bound that AOA absorbed into a variable edge is removed from
+        `arithmetic_filters`/`filter_attrib_dict`, but it is still a real query
+        bound and must constrain generated probe data.  Strict `<` predicates
+        are tightened by one datatype delta.
+        """
         i_min, i_max = get_min_and_max_val(datatype)
         lb, ub = i_min, i_max
         gen_ctx = getattr(self, "_gen_ctx", None)
         if gen_ctx is None:
             return lb, ub
         key = (tabname, attrib)
+        try:
+            delta, _ = get_constants_for(datatype)
+        except Exception:
+            delta = 1
+
+        for val in (getattr(gen_ctx, '_absorbed_LBs', None) or {}).get(key, []) or []:
+            if val is not None and val > lb:
+                lb = val
+        for val in (getattr(gen_ctx, '_absorbed_UBs', None) or {}).get(key, []) or []:
+            if val is not None and val < ub:
+                ub = val
+
         le_preds = getattr(gen_ctx, "global_aoa_le_predicates", []) or []
         l_preds = getattr(gen_ctx, "global_aoa_l_predicates", []) or []
+
         def _current_val(attrib):
             if not isinstance(attrib, tuple):
                 return attrib
@@ -234,40 +242,117 @@ class GenerationPipeLineBase(MutationPipeLineBase):
             l_attrib, r_attrib = pred[0], pred[1]
             if r_attrib == key:
                 l_val = _current_val(l_attrib)
-                if l_val is not None and l_val >= lb:
-                    lb = l_val
+                if l_val is not None:
+                    strict_lb = get_val_plus_delta(datatype, l_val, delta)
+                    if strict_lb > lb:
+                        lb = strict_lb
             if l_attrib == key:
                 r_val = _current_val(r_attrib)
-                if r_val is not None and r_val <= ub:
-                    ub = r_val
+                if r_val is not None:
+                    strict_ub = get_val_plus_delta(datatype, r_val, -delta)
+                    if strict_ub < ub:
+                        ub = strict_ub
+
+        # A concrete bound absorbed into both sides of a strict `<` edge can
+        # make the independent lower/upper choices equal. Tighten the edge
+        # sides once more so two generated boundary values still satisfy `<`.
+        for pred in l_preds:
+            if pred[1] == key:
+                strict_lb = get_val_plus_delta(datatype, lb, delta)
+                if lb <= strict_lb <= ub:
+                    lb = strict_lb
+            if pred[0] == key:
+                strict_ub = get_val_plus_delta(datatype, ub, -delta)
+                if lb <= strict_ub <= ub:
+                    ub = strict_ub
         return lb, ub
+
+    @staticmethod
+    def _filter_bound_pair(value):
+        """Extract (lb, ub) from a filter-dict value without assuming a 2-tuple."""
+        if isinstance(value, FrozenList):
+            values = list(value)
+        elif isinstance(value, (list, tuple)):
+            values = list(value)
+        else:
+            return value, value
+        if not values:
+            return None, None
+        return (get_boundary_value(values[0], is_ub=False),
+                get_boundary_value(values[-1], is_ub=True))
+
+    def get_effective_bounds(self, tabname: str, attrib: str, datatype=None):
+        """Single source of truth for probe-data bounds on one attribute."""
+        key = (tabname, attrib)
+        datatype = datatype or self.get_datatype(key)
+        i_min, i_max = get_min_and_max_val(datatype)
+        lb, ub = i_min, i_max
+
+        if key in self.filter_attrib_dict:
+            filter_lb, filter_ub = self._filter_bound_pair(self.filter_attrib_dict[key])
+            if filter_lb is not None and filter_lb > lb:
+                lb = filter_lb
+            if filter_ub is not None and filter_ub < ub:
+                ub = filter_ub
+
+        aoa_lb, aoa_ub = self.get_aoa_implied_bounds(tabname, attrib, datatype)
+        if aoa_lb > lb:
+            lb = aoa_lb
+        if aoa_ub < ub:
+            ub = aoa_ub
+        return lb, ub
+
+    def has_probe_bounds(self, tabname: str, attrib: str, datatype=None) -> bool:
+        datatype = datatype or self.get_datatype((tabname, attrib))
+        i_min, i_max = get_min_and_max_val(datatype)
+        lb, ub = self.get_effective_bounds(tabname, attrib, datatype)
+        return lb != i_min or ub != i_max
+
+    def get_s_value_within_bounds(self, tabname: str, attrib: str, datatype=None,
+                                  prefer: str = 'lb', delta=0, prev=None):
+        """Generate one probe value that satisfies all extracted bounds."""
+        pinned = self.get_cnf_pinned_or_none(tabname, attrib)
+        if pinned is not None:
+            return pinned
+        datatype = datatype or self.get_datatype((tabname, attrib))
+        if datatype not in NON_TEXT_TYPES:
+            return self.get_s_val_for_textType(attrib, tabname)
+
+        lb, ub = self.get_effective_bounds(tabname, attrib, datatype)
+        if lb > ub:
+            # Conflicting bounds should not happen for a valid query. Prefer
+            # the concrete absorbed/filter bound over an AOA-implied one.
+            lb, ub = ub, lb
+        val = lb if prefer == 'lb' else ub
+        val = get_val_plus_delta(datatype, val, delta)
+        if val > ub:
+            val = ub
+        if val < lb:
+            val = lb
+        if prev is not None and val == prev and lb != ub:
+            other = ub if val == lb else lb
+            other = get_val_plus_delta(datatype, other, delta)
+            if lb <= other <= ub:
+                val = other
+        return val
+
+    def get_s_value_plus_delta_within_bounds(self, tabname: str, attrib: str,
+                                             datatype, delta, prev=None):
+        """Generate a distinct probe value while staying inside all bounds."""
+        pinned = self.get_cnf_pinned_or_none(tabname, attrib)
+        if pinned is not None:
+            return pinned
+        return self.get_s_value_within_bounds(tabname, attrib, datatype=datatype,
+                                              prefer='lb', delta=delta, prev=prev)
 
     def get_different_s_val(self, attrib: str, tabname: str, prev) -> Union[int, float, date, str]:
         datatype = self.get_datatype((tabname, attrib))
         self.logger.debug(f"datatype of {attrib} is {datatype}")
         if datatype in NON_TEXT_TYPES:
-            if (tabname, attrib) in self.filter_attrib_dict.keys():
+            if self.has_probe_bounds(tabname, attrib, datatype):
                 val = self.get_other_than_dmin_val_nonText(attrib, tabname, prev)
             else:
-                lb, ub = self.get_aoa_implied_bounds(tabname, attrib, datatype)
-                from ...util.utils import get_min_and_max_val
-                i_min, i_max = get_min_and_max_val(datatype)
-                if lb > i_min or ub < i_max:
-                    # AOA-constrained: pick a value satisfying AOA bounds, different from prev.
-                    def _dist(a, b):
-                        if datatype == 'date':
-                            return abs((a - b).days)
-                        return abs(float(a) - float(b))
-                    if prev <= lb:
-                        val = ub
-                    elif prev >= ub:
-                        val = lb
-                    else:
-                        val = ub if _dist(ub, prev) >= _dist(prev, lb) else lb
-                    if val == prev:
-                        val = get_unused_dummy_val(datatype, [prev])
-                else:
-                    val = get_unused_dummy_val(datatype, [prev])
+                val = get_unused_dummy_val(datatype, [prev])
             if datatype == 'date':
                 val = ast.literal_eval(get_format(datatype, val))
         else:

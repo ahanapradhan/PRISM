@@ -515,24 +515,25 @@ class OrderBy(GenerationPipeLineBase):
                 self._store_joined_pair(attrib_inner, datatype, first, second)
                 return first, second
         # check for filter (#MORE PRECISION CAN BE ADDED FOR NUMERIC#)
-        if datatype != 'date':
-            datatype = 'int'
-        if (tabname_inner, attrib_inner) in self.filter_attrib_dict.keys():
-            first = self.filter_attrib_dict[(tabname_inner, attrib_inner)][0]
-            second = min(get_val_plus_delta(datatype, first, 1),
-                         self.filter_attrib_dict[(tabname_inner, attrib_inner)][1])
+        probe_datatype = 'date' if datatype == 'date' else 'int'
+        if self.has_probe_bounds(tabname_inner, attrib_inner, probe_datatype):
+            first = self.get_s_value_within_bounds(tabname_inner, attrib_inner,
+                                                   datatype=probe_datatype, prefer='lb')
+            second = self.get_s_value_plus_delta_within_bounds(tabname_inner, attrib_inner,
+                                                               probe_datatype, 1, prev=first)
         else:
-            first = get_unused_dummy_val(datatype, self.values_used)
-            second = get_val_plus_delta(datatype, first, 1)
+            first = get_unused_dummy_val(probe_datatype, self.values_used)
+            second = get_val_plus_delta(probe_datatype, first, 1)
         self.values_used.extend([first, second])
         self._store_joined_pair(attrib_inner, datatype, first, second)
         return first, second
 
     def get_date_values(self, attrib_inner, tabname_inner):
-        if (tabname_inner, attrib_inner) in self.filter_attrib_dict.keys():
-            first = self.filter_attrib_dict[(tabname_inner, attrib_inner)][0]
-            second = min(get_val_plus_delta('date', first, 1),
-                         self.filter_attrib_dict[(tabname_inner, attrib_inner)][1])
+        if self.has_probe_bounds(tabname_inner, attrib_inner, 'date'):
+            first = self.get_s_value_within_bounds(tabname_inner, attrib_inner,
+                                                   datatype='date', prefer='lb')
+            second = self.get_s_value_plus_delta_within_bounds(tabname_inner, attrib_inner,
+                                                               'date', 1, prev=first)
         else:
             first = get_dummy_val_for('date')
             second = get_val_plus_delta('date', first, 1)

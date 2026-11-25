@@ -14,7 +14,8 @@ from ..util.aoa_utils import get_min, get_max, get_attrib, get_tab, get_UB, get_
     find_transitive_concrete_upperBs, find_transitive_concrete_lowerBs, need_permanent_mutation, \
     find_concrete_bound_from_filter_bounds, add_item_to_dict, get_op, remove_item_from_dict
 
-from ..util.utils import get_val_plus_delta, add_two, get_mid_val, get_min_and_max_val
+from ..util.utils import get_val_plus_delta, add_two, get_mid_val, get_min_and_max_val, \
+    is_left_less_than_right_by_cutoff
 
 
 def check_redundancy(fl_list, a_ineq):
@@ -163,6 +164,13 @@ class InequalityPredicate(FilterHolder):
         self.__extract_dormant_UBs(E, datatype, directed_paths, query, L)
         self.logger.debug("after full round E: ", E)
 
+        # All accepted chains are now known. Re-probe the two ends with the
+        # whole chain moving together: a standalone endpoint probe can never
+        # see a bound that lies outside the dmin window of the rest of chain.
+        self.__rediscover_chain_lower_bounds(E, L, datatype, query)
+        self.__rediscover_chain_upper_bounds(E, L, datatype, query)
+        self.logger.debug("after chain-end re-discovery E: ", E)
+
         self.__absorb_arithmetic_filters()  # mandatory cleanup
         self.__revert_mutation_on_filter_global_min_instance_dict()
         return E, L
@@ -236,19 +244,35 @@ class InequalityPredicate(FilterHolder):
             self.logger.debug(f"LB of {attrib}: {prev_b}")
         return prev_b
 
+    def __probe_bound(self, tab_attrib, datatype, query, is_UB):
+        """Read a bound from the query instance, not from the AOA edge set.
+
+        Both the old and new values used by an AOA probe must come from this
+        same DB-backed check. Otherwise an unconfirmed dashed edge can appear
+        in the edge set and supply the baseline against which it is tested.
+        """
+        fe = self.__do_bound_check_again(tab_attrib, datatype, query)
+        getter = get_UB if is_UB else get_LB
+        extreme = get_max if is_UB else get_min
+        return getter(fe[0]) if fe is not None and len(fe) \
+            else extreme(self.constants_dict[datatype])
+
     def __absorb_variable_UBs(self, E, L, datatype, col_src, col_sink, query,
                               aoa_confirm):
-        prev_ub = self.__find_concrete_bound_from_edge_set(col_src, E, datatype, True)
+        # A rejected candidate must not undo an absorption recorded by an
+        # earlier, accepted edge. Keep the pre-probe state so a failed edge
+        # removes only what this probe added.
+        absorbed_lbs_before = copy.deepcopy(self.__absorbed_LBs)
+        absorbed_ubs_before = copy.deepcopy(self.__absorbed_UBs)
+        prev_ub = self.__probe_bound(col_src, datatype, query, True)
         if (col_src, col_sink) in E or (col_src, col_sink) in L:
             self.__absorb_variable_inbetween_bounds(col_src, col_sink, prev_ub)
 
-        col_sink_lb = self.__find_concrete_bound_from_edge_set(col_sink, E, datatype, is_UB=False)
+        col_sink_lb = self.__probe_bound(col_sink, datatype, query, False)
         val, dmin_val = self.__mutate_attrib_with_Bound_val(col_sink, datatype, col_sink_lb, query, with_UB=False)
 
         if val != dmin_val:
-            new_ub_fe = self.__do_bound_check_again(col_src, datatype, query)
-            new_ub = get_UB(new_ub_fe[0]) if new_ub_fe is not None and len(new_ub_fe) \
-                else get_max(self.constants_dict[datatype])
+            new_ub = self.__probe_bound(col_src, datatype, query, True)
 
             if prev_ub != new_ub:
                 add_item_to_list((col_src, col_sink), E)
@@ -274,6 +298,8 @@ class InequalityPredicate(FilterHolder):
             # treated as absorbed, or genuine concrete bounds on the source get
             # stripped and NEP is forced to rediscover them.
             self.__undo_absorbtion(col_sink, col_src, prev_ub)
+            self.__absorbed_LBs = absorbed_lbs_before
+            self.__absorbed_UBs = absorbed_ubs_before
 
     def __absorb_variable_LBs(self, E, L, datatype, col_src, col_sink, query) -> bool:
         aoa_confirm = False
@@ -281,18 +307,21 @@ class InequalityPredicate(FilterHolder):
         lb is lesser than current d_min value
         if any mutation happens in d_min, make sure the lb is updated accordingly
         """
-        prev_lb = self.__find_concrete_bound_from_edge_set(col_sink, E, datatype, False)
+        # A rejected candidate must not undo an absorption recorded by an
+        # earlier, accepted edge. Keep the pre-probe state so a failed edge
+        # removes only what this probe added.
+        absorbed_lbs_before = copy.deepcopy(self.__absorbed_LBs)
+        absorbed_ubs_before = copy.deepcopy(self.__absorbed_UBs)
+        prev_lb = self.__probe_bound(col_sink, datatype, query, False)
 
         if (col_src, col_sink) in E or (col_src, col_sink) in L:
             self.__absorb_variable_inbetween_bounds(col_src, col_sink, prev_lb)
 
-        col_src_ub = self.__find_concrete_bound_from_edge_set(col_src, E, datatype, is_UB=True)
+        col_src_ub = self.__probe_bound(col_src, datatype, query, True)
         val, dmin_val = self.__mutate_attrib_with_Bound_val(col_src, datatype, col_src_ub, query, with_UB=True)
 
         if val != dmin_val:
-            new_lb_fe = self.__do_bound_check_again(col_sink, datatype, query)
-            new_lb = get_LB(new_lb_fe[0]) if new_lb_fe is not None and len(new_lb_fe) \
-                else get_min(self.constants_dict[datatype])
+            new_lb = self.__probe_bound(col_sink, datatype, query, False)
 
             if prev_lb != new_lb:
                 aoa_confirm = True
@@ -314,6 +343,8 @@ class InequalityPredicate(FilterHolder):
 
         if not aoa_confirm:
             self.__undo_absorbtion(col_sink, col_src, prev_lb)
+            self.__absorbed_LBs = absorbed_lbs_before
+            self.__absorbed_UBs = absorbed_ubs_before
 
         return aoa_confirm
 
@@ -337,21 +368,45 @@ class InequalityPredicate(FilterHolder):
         for col in joined_src:
             self.mutate_dmin_with_val(datatype, col, mutation_lb)
 
+    def __is_rediscoverable_absorbed_bound(self, col_i, L, is_UB):
+        """Select the absorbed endpoint bound of a strict (`L`) edge for
+        re-discovery.
+
+        AOA first absorbs *all* in-between bounds of an accepted chain. Only a
+        strict edge has an endpoint bound that remains a standalone predicate:
+        the UB of its source and the LB of its sink. A non-strict (`E`) chain
+        keeps every in-between bound absorbed. The decision uses only the
+        discovered edge set, never the query text.
+        """
+        if not L:
+            return False
+        col_group = set(self.__get_equi_join_group(col_i))
+        for edge in L:
+            endpoint = edge[0] if is_UB else edge[1]
+            endpoint_group = set(self.__get_equi_join_group(endpoint))
+            if col_group & endpoint_group:
+                return True
+        return False
+
     def __extract_dormant_concrete_bound(self, E, L, col_i, datatype, query, is_UB):
-        # Once a concrete bound on this attribute has been absorbed into an AOA
-        # relation it must not be re-discovered as a dormant bound later in the
-        # same round. That was reintroducing stale bounds after disjunct search.
-        if col_i in self.__absorbed_LBs or col_i in self.__absorbed_UBs:
-            return
         self.__reset_dmin_state_for_probe()
         b_dot = self.__mutate_with_boundary_value(E, datatype, query, col_i, is_UB)
         boundary_val = self.__what_is_possible_bound_val(E, L, col_i, datatype, is_UB)
         i_bound = get_max(self.constants_dict[datatype]) if is_UB else get_min(self.constants_dict[datatype])
-        if b_dot not in [boundary_val, i_bound]:
-            if is_UB:
-                add_item_to_list((col_i, b_dot), E)
-            else:
-                add_item_to_list((b_dot, col_i), E)
+        if b_dot in [boundary_val, i_bound]:
+            return
+
+        # A value absorbed from the minimized instance is an AOA artefact, not
+        # a query predicate. Chain-end re-discovery, not the dormant probe,
+        # decides whether an endpoint bound is genuine.
+        absorbed_bounds = self.__absorbed_UBs if is_UB else self.__absorbed_LBs
+        if b_dot in absorbed_bounds.get(col_i, []):
+            return
+
+        if is_UB:
+            add_item_to_list((col_i, b_dot), E)
+        else:
+            add_item_to_list((b_dot, col_i), E)
 
     def __extract_dormant_LBs(self, E, col_src, datatype, query, L):
         self.__extract_dormant_concrete_bound(E, L, col_src, datatype, query, is_UB=False)
@@ -360,6 +415,240 @@ class InequalityPredicate(FilterHolder):
         for path in directed_paths:
             for col_i in reversed(path):
                 self.__extract_dormant_concrete_bound(E, L, col_i, datatype, query, is_UB=True)
+
+    def __rediscover_chain_lower_bounds(self, E, L, datatype, query):
+        """Re-discover the lower bound at the sink of every extracted chain.
+
+        The whole chain is shifted together, preserving the strict/non-strict
+        offsets already discovered in E and L. Candidate starting values come
+        only from values observed in the query result or discovered bounds; the
+        query itself decides whether a candidate is satisfiable.
+        """
+        i_min, i_max, delta = self.constants_dict[datatype]
+        variable_edges = [edge for edge in E + L
+                          if isinstance(edge[0], tuple) and isinstance(edge[1], tuple)]
+        strict_edges = {edge for edge in L
+                        if isinstance(edge[0], tuple) and isinstance(edge[1], tuple)}
+        paths = find_all_chains(create_adjacency_map_from_aoa_predicates(variable_edges))
+
+        for path in paths:
+            if len(path) < 2:
+                continue
+            self.__reset_dmin_state_for_probe()
+            groups = [self.__get_equi_join_group(node) for node in path]
+            offsets = [0]
+            for src, sink in zip(path, path[1:]):
+                offsets.append(offsets[-1] + (1 if (src, sink) in strict_edges else 0))
+            base_cap = get_val_plus_delta(datatype, i_max, -max(offsets) * delta)
+            if not is_left_less_than_right_by_cutoff(datatype, i_min, base_cap, 0):
+                continue
+
+            def apply(base):
+                for idx, group in enumerate(groups):
+                    val = get_val_plus_delta(datatype, base, offsets[idx] * delta)
+                    for col in group:
+                        self.mutate_dmin_with_val(self.get_datatype(col), col, val)
+
+            def satisfiable(base):
+                apply(base)
+                return not self.app.isQ_result_empty(self.app.doJob(query))
+
+            candidates = set()
+
+            def add_candidate(value, offset):
+                base = get_val_plus_delta(datatype, value, -offset * delta)
+                if base is None:
+                    return
+                if is_left_less_than_right_by_cutoff(datatype, i_min, base, 0) \
+                        and is_left_less_than_right_by_cutoff(datatype, base, base_cap, 0):
+                    candidates.add(base)
+
+            for node, offset in zip(path, offsets):
+                group = set(self.__get_equi_join_group(node))
+                for col in group:
+                    add_candidate(self.get_dmin_val(get_attrib(col), get_tab(col)), offset)
+                for key in group:
+                    for value in self.__absorbed_LBs.get(key, []) \
+                            + self.__absorbed_UBs.get(key, []):
+                        add_candidate(value, offset)
+                for edge in E:
+                    if not isinstance(edge[0], tuple) and edge[1] in group:
+                        add_candidate(edge[0], offset)
+                    if not isinstance(edge[1], tuple) and edge[0] in group:
+                        add_candidate(edge[1], offset)
+
+            self.logger.debug(
+                f"chain lower probe path={path} offsets={offsets} "
+                f"candidates={sorted(candidates)}")
+
+            try:
+                if satisfiable(i_min):
+                    self.logger.debug(f"chain lower probe {path}: no LB before domain min")
+                    continue
+                high = None
+                for base in sorted(candidates):
+                    if satisfiable(base):
+                        high = base
+                        break
+                if high is None:
+                    self.logger.debug(f"chain lower probe {path}: no satisfiable candidate")
+                    continue
+
+                low = i_min
+                while is_left_less_than_right_by_cutoff(datatype, low, high, 0):
+                    mid = get_mid_val(datatype, high, low)
+                    if mid == low or mid == high:
+                        break
+                    if satisfiable(mid):
+                        high = mid
+                    else:
+                        low = mid
+                discovered = get_val_plus_delta(datatype, high, offsets[-1] * delta)
+            finally:
+                self.__reset_dmin_state_for_probe()
+
+            if discovered is None or discovered == i_min:
+                continue
+            endpoint_group = set(self.__get_equi_join_group(path[-1]))
+            known = [edge[0] for edge in E
+                     if not isinstance(edge[0], tuple) and edge[1] in endpoint_group]
+            if known and min(known) <= discovered:
+                continue
+            # A bound implied by an earlier concrete bound on the same chain is
+            # not a standalone predicate.
+            implied = False
+            for node, offset in zip(path[:-1], offsets[:-1]):
+                group = set(self.__get_equi_join_group(node))
+                for edge in E:
+                    if not isinstance(edge[0], tuple) and edge[1] in group:
+                        expected = get_val_plus_delta(
+                            datatype, edge[0], (offsets[-1] - offset) * delta)
+                        if expected == discovered:
+                            implied = True
+            if implied:
+                continue
+            for edge in list(E):
+                if edge[1] in endpoint_group and not isinstance(edge[0], tuple) \
+                        and edge[0] > discovered:
+                    remove_item_from_list(edge, E)
+            add_item_to_list((discovered, path[-1]), E)
+            self.logger.debug(f"chain lower probe recovered {discovered} <= {path[-1]}")
+
+    def __rediscover_chain_upper_bounds(self, E, L, datatype, query):
+        """Re-discover the upper bound at the source of every extracted chain.
+
+        This is the reverse of the lower-bound check: the whole chain is moved
+        upward, still respecting the discovered AOA offsets.
+        """
+        i_min, i_max, delta = self.constants_dict[datatype]
+        variable_edges = [edge for edge in E + L
+                          if isinstance(edge[0], tuple) and isinstance(edge[1], tuple)]
+        strict_edges = {edge for edge in L
+                        if isinstance(edge[0], tuple) and isinstance(edge[1], tuple)}
+        paths = find_all_chains(create_adjacency_map_from_aoa_predicates(variable_edges))
+
+        for path in paths:
+            if len(path) < 2:
+                continue
+            self.__reset_dmin_state_for_probe()
+            groups = [self.__get_equi_join_group(node) for node in path]
+            offsets = [0]
+            for src, sink in zip(path, path[1:]):
+                offsets.append(offsets[-1] + (1 if (src, sink) in strict_edges else 0))
+            base_floor = get_val_plus_delta(datatype, i_min, max(offsets) * delta)
+            if not is_left_less_than_right_by_cutoff(datatype, base_floor, i_max, 0):
+                continue
+
+            def apply(base):
+                for idx, group in enumerate(groups):
+                    val = get_val_plus_delta(datatype, base, offsets[idx] * delta)
+                    for col in group:
+                        self.mutate_dmin_with_val(self.get_datatype(col), col, val)
+
+            def satisfiable(base):
+                apply(base)
+                return not self.app.isQ_result_empty(self.app.doJob(query))
+
+            candidates = set()
+
+            def add_candidate(value, offset):
+                base = get_val_plus_delta(datatype, value, -offset * delta)
+                if base is None:
+                    return
+                if is_left_less_than_right_by_cutoff(datatype, base_floor, base, 0) \
+                        and is_left_less_than_right_by_cutoff(datatype, base, i_max, 0):
+                    candidates.add(base)
+
+            for node, offset in zip(path, offsets):
+                group = set(self.__get_equi_join_group(node))
+                for col in group:
+                    add_candidate(self.get_dmin_val(get_attrib(col), get_tab(col)), offset)
+                for key in group:
+                    for value in self.__absorbed_LBs.get(key, []) \
+                            + self.__absorbed_UBs.get(key, []):
+                        add_candidate(value, offset)
+                for edge in E:
+                    if not isinstance(edge[0], tuple) and edge[1] in group:
+                        add_candidate(edge[0], offset)
+                    if not isinstance(edge[1], tuple) and edge[0] in group:
+                        add_candidate(edge[1], offset)
+
+            self.logger.debug(
+                f"chain upper probe path={path} offsets={offsets} "
+                f"candidates={sorted(candidates)}")
+
+            try:
+                if satisfiable(i_max):
+                    self.logger.debug(f"chain upper probe {path}: no UB before domain max")
+                    continue
+                low = None
+                for base in sorted(candidates, reverse=True):
+                    if satisfiable(base):
+                        low = base
+                        break
+                if low is None:
+                    self.logger.debug(f"chain upper probe {path}: no satisfiable candidate")
+                    continue
+
+                high = i_max
+                while is_left_less_than_right_by_cutoff(datatype, low, high, 0):
+                    mid = get_mid_val(datatype, high, low)
+                    if mid == low or mid == high:
+                        break
+                    if satisfiable(mid):
+                        low = mid
+                    else:
+                        high = mid
+                discovered = get_val_plus_delta(datatype, low, offsets[0] * delta)
+            finally:
+                self.__reset_dmin_state_for_probe()
+
+            if discovered is None or discovered == i_max:
+                continue
+            endpoint_group = set(self.__get_equi_join_group(path[0]))
+            known = [edge[1] for edge in E
+                     if not isinstance(edge[1], tuple) and edge[0] in endpoint_group]
+            if known and max(known) >= discovered:
+                continue
+            # A bound implied by a later concrete bound on the same chain is
+            # not a standalone predicate.
+            implied = False
+            for node, offset in zip(path[1:], offsets[1:]):
+                group = set(self.__get_equi_join_group(node))
+                for edge in E:
+                    if not isinstance(edge[1], tuple) and edge[0] in group:
+                        expected = get_val_plus_delta(
+                            datatype, edge[1], -(offset - offsets[0]) * delta)
+                        if expected == discovered:
+                            implied = True
+            if implied:
+                continue
+            for edge in list(E):
+                if edge[0] in endpoint_group and not isinstance(edge[1], tuple) \
+                        and edge[1] < discovered:
+                    remove_item_from_list(edge, E)
+            add_item_to_list((path[0], discovered), E)
+            self.logger.debug(f"chain upper probe recovered {path[0]} <= {discovered}")
 
     def __what_is_concrete_bound_val(self, tab_attrib, is_UB):
         compare_op = '<=' if is_UB else '>='
