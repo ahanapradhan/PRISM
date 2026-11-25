@@ -290,6 +290,30 @@ class QueryStringGenerator:
         raise NotImplementedError
 
     @property
+    def global_projected_attributes(self):
+        return self._workingCopy.global_projected_attributes
+
+    @global_projected_attributes.setter
+    def global_projected_attributes(self, value):
+        self._workingCopy.global_projected_attributes = list(value)
+
+    @property
+    def global_groupby_attributes(self):
+        return self._workingCopy.global_groupby_attributes
+
+    @global_groupby_attributes.setter
+    def global_groupby_attributes(self, value):
+        self._workingCopy.global_groupby_attributes = list(value)
+
+    @property
+    def global_aggregated_attributes(self):
+        return self._workingCopy.global_aggregated_attributes
+
+    @global_aggregated_attributes.setter
+    def global_aggregated_attributes(self, value):
+        self._workingCopy.global_aggregated_attributes = [tuple(agg) for agg in value]
+
+    @property
     def join_edges(self):
         return self._workingCopy.join_edges
 
