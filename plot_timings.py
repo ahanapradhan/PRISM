@@ -55,7 +55,13 @@ def main():
     else:
         stages = [s for s in STAGE_COLUMNS if s in df.columns and df[s].fillna(0).sum() > 0]
 
-    data = df.set_index("query_id")[stages].fillna(0)
+    # Reruns of the same query are kept as separate rows. Make the y-axis label
+    # unique so .loc[...] does not expand duplicate labels into a cross product.
+    df = df.reset_index(drop=True)
+    duplicated = df["query_id"].duplicated(keep=False)
+    df["plot_id"] = df["query_id"].where(
+        ~duplicated, df["query_id"] + " (" + df["label"].astype(str) + ")")
+    data = df.set_index("plot_id")[stages].fillna(0)
     data = data.loc[data.sum(axis=1).sort_values(ascending=True).index]
 
     ax = data.plot.barh(
