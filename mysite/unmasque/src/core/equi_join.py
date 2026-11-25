@@ -3,7 +3,7 @@ import copy
 from ...src.core.abstract.abstractConnection import AbstractConnectionHelper
 from ...src.core.abstract.filter_holder import FilterHolder
 from ...src.core.filter import Filter
-from ...src.util.aoa_utils import get_op, get_tab, get_attrib, merge_equivalent_paritions
+from ...src.util.aoa_utils import get_op, get_tab, get_attrib, get_LB, merge_equivalent_paritions
 
 from typing import List, Tuple
 
@@ -68,9 +68,23 @@ class U2EquiJoin(FilterHolder):
             equi_join_group.extend(filter_attribs)
         if not len(filter_attribs) or filter_attribs[0][2] != '=':
             self.algebraic_eq_predicates.append(equi_join_group)
-        else:
-            return False
-        return True
+            return True
+
+        # The group is pinned to a single value.  It is no longer an equi-join
+        # worth emitting, but the filter that pinned it is a real predicate and
+        # must not disappear with the group.  This happens, for example, when
+        # an IN list contains the minimized value and every other member of the
+        # join group therefore looks equal to that value.
+        const_pred = filter_attribs[0]
+        value = get_LB(const_pred)
+        op = get_op(const_pred)
+        for member in equi_join_group:
+            if not isinstance(member, tuple) or len(member) != 2:
+                continue
+            pinned = (member[0], member[1], op, value, value)
+            if pinned not in self.arithmetic_eq_predicates:
+                self.arithmetic_eq_predicates.append(pinned)
+        return False
 
     def handle_higher_eq_groups(self, equi_join_group, query):
         seq = list(range(len(equi_join_group)))

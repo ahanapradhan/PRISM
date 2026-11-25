@@ -369,6 +369,35 @@ class GenPipelineContext:
                                r_dmin_val)
         return LB_dict, UB_dict
 
+    def __is_duplicate_joined_filter(self, key, explicit_keys) -> bool:
+        """True when `key` only repeats an explicit filter through an equi-join.
+
+        `filter_attrib_dict` is intentionally propagated to join-equivalent
+        columns so probe generation uses the same bounds on every side of a
+        join.  Those propagated copies are not standalone query predicates and
+        must not be rendered back into the WHERE clause.
+        """
+        for eq_group in self.__algebraic_eq_predicates:
+            if key not in eq_group:
+                continue
+            for member in eq_group:
+                if not isinstance(member, tuple) or len(member) != 2:
+                    continue
+                peer = (member[0], member[1])
+                if peer == key or peer not in explicit_keys:
+                    continue
+                if self.__same_filter_value(self.filter_attrib_dict.get(key),
+                                            self.filter_attrib_dict.get(peer)):
+                    return True
+            break
+        return False
+
+    @staticmethod
+    def __same_filter_value(left, right) -> bool:
+        if isinstance(left, tuple) and isinstance(right, tuple):
+            return len(left) == len(right) and all(a == b for a, b in zip(left, right))
+        return left == right
+
     def __update_filter_predicates_from_filter_dict(self):
         filter_dict = []
         for pred in self.arithmetic_filters:
@@ -382,6 +411,8 @@ class GenPipelineContext:
             if not isinstance(key, tuple) or len(key) != 2:
                 continue
             if key in filter_dict:
+                continue
+            if self.__is_duplicate_joined_filter(key, filter_dict):
                 continue
             # Do not synthesize standalone conjuncts for attributes participating in
             # discovered cross-column OR clauses (disjunctive, not standalone).
@@ -444,8 +475,19 @@ class GenPipelineContext:
         for p in self.__or_predicates:
             non_empty_indices = [i for i, t_a in enumerate(p) if t_a]
             if len(non_empty_indices) == 1:
-                if p[non_empty_indices[0]] not in self.arithmetic_filters:
-                    self.arithmetic_filters.append(p[non_empty_indices[0]])
+                single_pred = p[non_empty_indices[0]]
+                single_key = (single_pred[0], single_pred[1])
+                # A slot whose sibling alternatives are empty is an incomplete
+                # disjunct, not a new standalone conjunct. If AOA already
+                # accepted a concrete bound for this column, emitting the
+                # discovered alternative as well narrows the result using only
+                # one branch of the disjunction. Keep the accepted bound.
+                if len(p) > 1 and any(
+                        (pred[0], pred[1]) == single_key
+                        for pred in self.arithmetic_filters):
+                    continue
+                if single_pred not in self.arithmetic_filters:
+                    self.arithmetic_filters.append(single_pred)
                 continue
             tab_attribs = [(p[i][0], p[i][1]) for i in non_empty_indices]
             uniq_tab_attribs = set(tab_attribs)

@@ -70,7 +70,7 @@ ps_availqty > 200 Order By s_suppkey Limit 7);""",False, True, False, False),
  WHERE c_custkey = o_custkey
    AND o_orderdate >= '1995-01-01'
  GROUP BY c_custkey
- ORDER BY total ASC LIMIT 10)
+ ORDER BY total ASC)
 UNION ALL
 (SELECT l_orderkey AS order_id, AVG(l_quantity) AS total
  FROM orders, lineitem
@@ -394,7 +394,7 @@ WHERE
     c_custkey = o_custkey
     AND c_custkey > 5000
     AND c_nationkey = n_nationkey
-    AND n_nationkey IN (1, 2, 4, 5, 3, 10)
+    AND n_nationkey IN (1, 10)
     AND c_acctbal < 7000
     AND o_totalprice > 1000
     AND c_acctbal <= o_totalprice

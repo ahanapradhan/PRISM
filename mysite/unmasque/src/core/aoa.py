@@ -743,6 +743,28 @@ class InequalityPredicate(FilterHolder):
             self.arithmetic_filters.append(a_eq)
         to_remove = []
         for a_ineq in self.arithmetic_ineq_predicates:
+            if get_op(a_ineq) == 'range':
+                lb, ub = get_LB(a_ineq), get_UB(a_ineq)
+                broader_exists = False
+                narrower_filters = []
+                for existing in self.arithmetic_filters:
+                    if get_op(existing) != 'range':
+                        continue
+                    if (get_tab(existing), get_attrib(existing)) != (get_tab(a_ineq), get_attrib(a_ineq)):
+                        continue
+                    e_lb, e_ub = get_LB(existing), get_UB(existing)
+                    if e_lb <= lb and ub <= e_ub:
+                        broader_exists = True
+                        break
+                    if lb <= e_lb and e_ub <= ub:
+                        narrower_filters.append(existing)
+                if broader_exists:
+                    to_remove.append(a_ineq)
+                    continue
+                for narrower in narrower_filters:
+                    remove_item_from_list(narrower, self.arithmetic_filters)
+                self.arithmetic_filters.append(a_ineq)
+                continue
             red = check_redundancy(self.arithmetic_filters, a_ineq)
             if red:
                 to_remove.append(a_ineq)
