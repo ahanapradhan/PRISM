@@ -384,8 +384,7 @@ WHERE
     AND c_acctbal > 1000
     AND c_acctbal <= o_totalprice
 GROUP BY o_clerk, n_name
-ORDER BY o_clerk
-LIMIT 30;""", False, False, False, False, False),
+ORDER BY o_clerk;""", False, False, False, False, False),
                      TestQuery("F17", """SELECT
     o_clerk,
     SUM(c_acctbal + 3.54 * o_totalprice) AS total_price,
