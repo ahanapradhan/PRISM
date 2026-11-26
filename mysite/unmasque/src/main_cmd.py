@@ -164,7 +164,7 @@ Order By s_name LIMIT 10);""", False, True, True, False),
 	Order by l_orderkey, price desc Limit 100
 ) union all (select o_orderkey, c_acctbal as price, c_custkey
 from customer LEFT OUTER JOIN orders on c_custkey = o_custkey
- where c_custkey > 1000 and c_custkey < 1010 Order By price desc, o_orderkey, c_custkey Limit 100);
+ where c_acctbal > 9000 and c_acctbal < 9100 Order By price desc, o_orderkey, c_custkey Limit 100);
 """, False, True, True, False),
                      TestQuery("F4", """select n_name, c_acctbal from nation LEFT OUTER JOIN customer 
                      ON n_nationkey = c_nationkey and c_nationkey > 3 and n_nationkey < 20 and 
