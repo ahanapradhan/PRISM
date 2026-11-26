@@ -5,6 +5,9 @@ Usage:
     python plot_timings.py                          # writes timings_per_query.png
     python plot_timings.py --label patched --log-x  # filter rows, log-scaled x axis
     python plot_timings.py --stages from_clause,view_minimization,result_comparator
+
+For queries with multiple timing rows, the run with the smallest ``prism_total``
+is plotted.
 """
 import argparse
 
@@ -50,18 +53,22 @@ def main():
     if df.empty:
         raise SystemExit("no ok rows to plot")
 
+    # Reruns of the same query are kept as separate rows. Plot only the fastest
+    # run for each query, as measured by prism_total.
+    if "prism_total" in df.columns:
+        totals = pd.to_numeric(df["prism_total"], errors="coerce").fillna(float("inf"))
+        df = (df.assign(_prism_total=totals)
+                .sort_values("_prism_total", kind="stable")
+                .drop_duplicates("query_id", keep="first")
+                .drop(columns="_prism_total"))
+
     if args.stages:
         stages = [s.strip() for s in args.stages.split(",")]
     else:
         stages = [s for s in STAGE_COLUMNS if s in df.columns and df[s].fillna(0).sum() > 0]
 
-    # Reruns of the same query are kept as separate rows. Make the y-axis label
-    # unique so .loc[...] does not expand duplicate labels into a cross product.
     df = df.reset_index(drop=True)
-    duplicated = df["query_id"].duplicated(keep=False)
-    df["plot_id"] = df["query_id"].where(
-        ~duplicated, df["query_id"] + " (" + df["label"].astype(str) + ")")
-    data = df.set_index("plot_id")[stages].fillna(0)
+    data = df.set_index("query_id")[stages].fillna(0)
     data = data.loc[data.sum(axis=1).sort_values(ascending=True).index]
 
     ax = data.plot.barh(
@@ -79,7 +86,8 @@ def main():
     ax.grid(axis="x", linestyle=":", alpha=0.4)
     plt.tight_layout()
     plt.savefig(args.out, dpi=150)
-    print(f"wrote {args.out} ({len(data)} queries, {len(stages)} stages)")
+    print(f"wrote {args.out} ({len(data)} queries, {len(stages)} stages; "
+          f"min prism_total per query)")
 
 
 if __name__ == "__main__":
