@@ -19,14 +19,16 @@ import sys
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[3]
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "mysite"))
 
 from mysite.unmasque.src.main_cmd import build_workload  # noqa: E402
 
-CSV_PATH = REPO / "timings_per_query.csv"
+CSV_PATH = HERE / "timings_per_query.csv"
 LOG_DIR = Path("/tmp/prism_matrix_logs")
-CHILD = REPO / "tmp_profile_csv.py"
+CHILD = HERE / "tmp_profile_csv.py"
 APP_LOG = REPO / "mysite" / "unmasque.log"
 
 STAGE_COLUMNS = [
@@ -175,7 +177,7 @@ def upsert_row(csv_path, row):
 
 
 def refresh_plot(csv_path, label, out):
-    cmd = [sys.executable, str(REPO / "plot_timings.py"), str(csv_path),
+    cmd = [sys.executable, str(HERE / "plot_timings.py"), str(csv_path),
            "--label", label, "--out", str(out)]
     try:
         subprocess.run(cmd, cwd=str(REPO), check=True,
@@ -195,7 +197,7 @@ def main():
     parser.add_argument("--max-child-mb", type=int, default=6000, help="kill a run above this RSS")
     parser.add_argument("--max-total-mb", type=int, default=9000,
                         help="kill a run when child + tpch backends exceed this")
-    parser.add_argument("--plot-out", default=str(REPO / "timings_per_query.png"))
+    parser.add_argument("--plot-out", default=str(HERE / "timings_per_query.png"))
     args = parser.parse_args()
 
     qids = args.only.split(",") if args.only else default_qids()

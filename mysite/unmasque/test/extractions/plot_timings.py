@@ -10,12 +10,15 @@ For queries with multiple timing rows, the run with the smallest ``prism_total``
 is plotted.
 """
 import argparse
+from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+
+HERE = Path(__file__).resolve().parent
 
 STAGE_COLUMNS = [
     "t_init",
@@ -38,8 +41,8 @@ STAGE_COLUMNS = [
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("csv", nargs="?", default="timings_per_query.csv")
-    ap.add_argument("--out", default="timings_per_query.png")
+    ap.add_argument("csv", nargs="?", default=str(HERE / "timings_per_query.csv"))
+    ap.add_argument("--out", default=str(HERE / "timings_per_query.png"))
     ap.add_argument("--label", help="only plot rows with this label")
     ap.add_argument("--stages", help="comma-separated stage columns (default: all with nonzero time)")
     ap.add_argument("--log-x", action="store_true", help="log-scale the time axis")

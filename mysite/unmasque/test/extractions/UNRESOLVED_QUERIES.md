@@ -19,17 +19,17 @@ Use this file as the lookup table when asked about unresolved/false queries or a
 
 ## Verification runs
 
-All runs used `tmp_run_matrix.py` with the same all-advanced-extractors configuration (`union=True`, `oj=True`, `nep=True`, `orf=True`, `cs2=False`, native backup):
+All runs used `mysite/unmasque/test/extractions/tmp_run_matrix.py` with the same all-advanced-extractors configuration (`union=True`, `oj=True`, `nep=True`, `orf=True`, `cs2=False`, native backup):
 
 ```bash
-/home/iiitb/Downloads/Python-3.9.0/python tmp_run_matrix.py --only O3,oj_bug,F16,A10,A13,UK6,UK8,DISJ_OJ1,DISJ_UN3,N9,U8,F12,F17,N8,Alaap --label unresolved --timeout 1800
-/home/iiitb/Downloads/Python-3.9.0/python tmp_run_matrix.py --only MQ3,MQ5,F3,MQ10,MQ11 --label unresolved --timeout 1800
-/home/iiitb/Downloads/Python-3.9.0/python tmp_run_matrix.py --only F3,A13,UK6,DISJ_OJ1 --label recheck --timeout 1800
-/home/iiitb/Downloads/Python-3.9.0/python tmp_run_matrix.py --only F3,DISJ_OJ1,oj_bug,O3,UK8 --label stability --timeout 1800
-/home/iiitb/Downloads/Python-3.9.0/python tmp_run_matrix.py --only UK8,UK3 --label comparator_fix --timeout 1800
-/home/iiitb/Downloads/Python-3.9.0/python tmp_run_matrix.py --only MQ10 --label mq10_repeat_1 --timeout 1800   # ... through mq10_repeat_10
-/home/iiitb/Downloads/Python-3.9.0/python tmp_run_matrix.py --only MQ10 --label mq10_cap_1 --timeout 1800      # ... through mq10_cap_10
-/home/iiitb/Downloads/Python-3.9.0/python tmp_run_matrix.py --only MQ10 --label mq10_cap_store_1 --timeout 1800 # ... through mq10_cap_store_10
+/home/iiitb/Downloads/Python-3.9.0/python mysite/unmasque/test/extractions/tmp_run_matrix.py --only O3,oj_bug,F16,A10,A13,UK6,UK8,DISJ_OJ1,DISJ_UN3,N9,U8,F12,F17,N8,Alaap --label unresolved --timeout 1800
+/home/iiitb/Downloads/Python-3.9.0/python mysite/unmasque/test/extractions/tmp_run_matrix.py --only MQ3,MQ5,F3,MQ10,MQ11 --label unresolved --timeout 1800
+/home/iiitb/Downloads/Python-3.9.0/python mysite/unmasque/test/extractions/tmp_run_matrix.py --only F3,A13,UK6,DISJ_OJ1 --label recheck --timeout 1800
+/home/iiitb/Downloads/Python-3.9.0/python mysite/unmasque/test/extractions/tmp_run_matrix.py --only F3,DISJ_OJ1,oj_bug,O3,UK8 --label stability --timeout 1800
+/home/iiitb/Downloads/Python-3.9.0/python mysite/unmasque/test/extractions/tmp_run_matrix.py --only UK8,UK3 --label comparator_fix --timeout 1800
+/home/iiitb/Downloads/Python-3.9.0/python mysite/unmasque/test/extractions/tmp_run_matrix.py --only MQ10 --label mq10_repeat_1 --timeout 1800   # ... through mq10_repeat_10
+/home/iiitb/Downloads/Python-3.9.0/python mysite/unmasque/test/extractions/tmp_run_matrix.py --only MQ10 --label mq10_cap_1 --timeout 1800      # ... through mq10_cap_10
+/home/iiitb/Downloads/Python-3.9.0/python mysite/unmasque/test/extractions/tmp_run_matrix.py --only MQ10 --label mq10_cap_store_1 --timeout 1800 # ... through mq10_cap_store_10
 ```
 
 The post-fix A13 check was a direct run, so it has no `PROFILE_JSON` row:
@@ -53,7 +53,7 @@ Both finished with `correct=true`: A10 at `prism_total=6.515`, `wall_clock=11.03
 The final A-series validation ran every A query from the current tree with all advanced flags enabled, one fresh process and schema reset per query:
 
 ```bash
-/usr/local/bin/python3.9 tmp_run_matrix.py \
+/usr/local/bin/python3.9 mysite/unmasque/test/extractions/tmp_run_matrix.py \
   --only A1,A2,A3,A4,A5,Alaap,A7,A8,A10,A11,A12,A13,A14,A15,A16 \
   --label final5_allflags \
   --csv /tmp/opencode/final5_allflags.csv \
@@ -164,4 +164,4 @@ After any future full or partial rerun:
 2. Move fixed queries out of the current table into “Fixed / historical issues”.
 3. Record whether a query was stable or intermittent, and keep exact SQL/error examples where available.
 4. Drop the `unmasque` verification schema after the run so the database is left clean.
-5. Keep log-derived rows clearly labelled (`a13_postfix_log`) so they are not confused with `PROFILE_JSON` rows from `tmp_run_matrix.py`.
+5. Keep log-derived rows clearly labelled (`a13_postfix_log`) so they are not confused with `PROFILE_JSON` rows from `mysite/unmasque/test/extractions/tmp_run_matrix.py`.

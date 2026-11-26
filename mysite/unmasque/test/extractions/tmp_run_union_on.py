@@ -2,14 +2,14 @@
 
 Used only to measure MQ18 with the union pipeline enabled.  Deleted after use.
 """
-import os
+from pathlib import Path
 import sys
 
 qid = sys.argv[1]
 sys.argv = ["main_cmd", qid]
 
-src_path = os.path.join(os.path.dirname(__file__),
-                        "mysite", "unmasque", "src", "main_cmd.py")
+repo_root = Path(__file__).resolve().parents[3]
+src_path = str(repo_root / "mysite" / "unmasque" / "src" / "main_cmd.py")
 with open(src_path) as f:
     code = f.read()
 code = code.replace("conn.config.detect_union = hq.union",

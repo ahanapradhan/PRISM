@@ -9,11 +9,13 @@ import html
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent
-CSV_PATH = REPO / "timings_per_query.csv"
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[3]
+CSV_PATH = HERE / "timings_per_query.csv"
 LOG_DIR = Path("/tmp/prism_matrix_logs")
-OUT_PATH = REPO / "extraction_results.md"
+OUT_PATH = HERE / "extraction_results.md"
 
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "mysite"))
 from mysite.unmasque.src.main_cmd import build_workload  # noqa: E402
 
