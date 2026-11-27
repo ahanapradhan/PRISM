@@ -14,6 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.lines import Line2D
 from matplotlib.path import Path as MplPath
 
 from plot_timings import STAGE_COLUMNS
@@ -75,7 +76,8 @@ def main():
 
     fig.suptitle("PRISM pipeline stage timings per query", y=0.998, fontsize=12)
 
-    # A single curly brace in the gap marks the collapsed interval.
+    # A single curly brace lies ON the top x-axis at the cut, spanning the
+    # omitted 125-550 s interval rather than floating in the panel gap.
     brace_verts = [
         (0.8, 1.0),
         (0.4, 1.0), (0.2, 0.95), (0.2, 0.85),
@@ -83,13 +85,19 @@ def main():
         (0.5, 0.35), (0.2, 0.3), (0.2, 0.15),
         (0.2, 0.05), (0.4, 0.0), (0.8, 0.0),
     ]
-    brace_codes = ([MplPath.MOVETO] + [MplPath.CURVE4] * (len(brace_verts) - 1))
+    brace_codes = [MplPath.MOVETO] + [MplPath.CURVE4] * (len(brace_verts) - 1)
     brace = MplPath(brace_verts, brace_codes).interpolated(200).vertices
+
     left_pos = ax_left.get_position()
-    gap_frac = (ax_right.get_position().x0 - left_pos.x1) / left_pos.width
-    ax_left.plot(1.0 + gap_frac * brace[:, 0], brace[:, 1],
-                 transform=ax_left.transAxes, color="black",
-                 linewidth=1.5, clip_on=False)
+    right_pos = ax_right.get_position()
+    cut_x = (left_pos.x1 + right_pos.x0) / 2
+    span = 0.045
+    axis_y = 0.968
+    thickness = 0.012
+    xs = cut_x - span / 2 + span * brace[:, 1]
+    ys = axis_y + thickness * (brace[:, 0] - 0.5)
+    fig.add_artist(Line2D(xs, ys, transform=fig.transFigure,
+                          color="black", linewidth=1.5))
 
     handles, labels = ax_left.get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower right", fontsize=8, ncol=2)
