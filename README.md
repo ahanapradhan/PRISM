@@ -121,6 +121,8 @@ Two files in the `mysite` directory control the setup:
 
 The entry point is `mysite/unmasque/src/main_cmd.py`. It ships with one default input query and a workload list, each entry identified by a `qid`. Sample queries are in the `test.util` package (`queries.py`). To test more queries, add them to the workload.
 
+PRISM has been tested on the queries given in [SQL_workload.sql](SQL_workload.sql), which contains every query defined in `main_cmd.py`.
+
 ### Command line
 
 From the `mysite` directory:
