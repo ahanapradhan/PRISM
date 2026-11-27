@@ -63,6 +63,8 @@ def main():
         )
         ax.grid(axis="x", linestyle=":", alpha=0.4)
         ax.xaxis.set_ticks_position("both")
+        ax.tick_params(axis="x", which="both", top=True, bottom=True,
+                       labeltop=True, labelbottom=True)
         ax.xaxis.set_label_position("top")
         ax.set_xlabel("Time (s)", labelpad=6)
         ax.text(0.5, -0.018, "Time (s)", transform=ax.transAxes,
@@ -100,7 +102,8 @@ def main():
                           color="black", linewidth=1.5))
 
     handles, labels = ax_left.get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower right", fontsize=8, ncol=2)
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.955),
+               fontsize=8, ncol=2)
 
     fig.savefig(args.out, dpi=150)
     print(f"wrote {args.out} ({len(data)} queries, {len(stages)} stages; "
