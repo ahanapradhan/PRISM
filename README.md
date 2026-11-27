@@ -125,7 +125,7 @@ PRISM has been tested on the queries given in [SQL_workload.sql](SQL_workload.sq
 
 ### Per-query timings
 
-![PRISM pipeline stage timings per query](mysite/unmasque/test/extractions/timings_per_query.png)
+![PRISM pipeline stage timings per query](mysite/unmasque/test/extractions/timings_per_query_broken_axis.png)
 
 ### Command line
 
