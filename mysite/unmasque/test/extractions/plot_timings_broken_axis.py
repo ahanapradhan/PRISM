@@ -78,8 +78,9 @@ def main():
 
     fig.suptitle("PRISM pipeline stage timings per query", y=0.998, fontsize=12)
 
-    # A single curly brace lies ON the top x-axis at the cut, spanning the
-    # omitted 125-550 s interval rather than floating in the panel gap.
+    # A single curly brace spans the omitted 125-550 s interval, flipped so
+    # its two ends sit on the top x-axis spine and the arch rises outside the
+    # plot area (rather than overlapping the bars).
     brace_verts = [
         (0.8, 1.0),
         (0.4, 1.0), (0.2, 0.95), (0.2, 0.85),
@@ -94,15 +95,17 @@ def main():
     right_pos = ax_right.get_position()
     cut_x = (left_pos.x1 + right_pos.x0) / 2
     span = 0.045
-    axis_y = 0.988
-    thickness = 0.008
-    xs = cut_x - span / 2 + span * brace[:, 1]
-    ys = axis_y + thickness * (brace[:, 0] - 0.5)
+    axis_y = left_pos.y1
+    thickness = 0.014
+    # Mirror left-right and stand the brace on the axis: its endpoints (the
+    # path's x=0.8 extrema) land exactly on the spine, the arch bulges upward.
+    xs = cut_x + span / 2 - span * brace[:, 1]
+    ys = axis_y + thickness * (0.8 - brace[:, 0])
     fig.add_artist(Line2D(xs, ys, transform=fig.transFigure,
                           color="black", linewidth=1.5))
 
     handles, labels = ax_left.get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.04),
+    fig.legend(handles, labels, loc="center", bbox_to_anchor=(0.5, 0.5),
                fontsize=8, ncol=2)
 
     fig.savefig(args.out, dpi=150)
