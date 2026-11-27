@@ -211,15 +211,6 @@ GROUP BY l_orderkey, o_orderdate, o_shippriority
 ORDER BY revenue DESC, o_orderdate
 LIMIT 10;
 
--- Query: MQ4
-SELECT o_orderdate, o_orderpriority, COUNT(*) AS order_count
-FROM orders
-WHERE o_orderdate >= DATE '1997-07-01' 
-  AND o_orderdate < DATE '1997-07-01' + INTERVAL '3 months'
-GROUP BY o_orderdate, o_orderpriority
-ORDER BY o_orderpriority
-LIMIT 10;
-
 -- Query: MQ5
 SELECT n_name, 
        SUM(l_extendedprice * (1 - l_discount)) AS revenue
@@ -312,51 +303,6 @@ select c_mktsegment,
                         and l_quantity <= 123  group by o_orderdate, o_shippriority, c_mktsegment 
                          order by revenue desc, o_orderdate asc, o_shippriority asc;
 
--- Query: TPCH_Q12
-select
-	l_shipmode,
-	sum(case
-		when o_orderpriority = '1-URGENT'
-			or o_orderpriority = '2-HIGH'
-			then 1
-		else 0
-	end) as high_line_count,
-	sum(case
-		when o_orderpriority <> '1-URGENT'
-			and o_orderpriority <> '2-HIGH'
-			then 1
-		else 0
-	end) as low_line_count
-from
-	orders,
-	lineitem
-where
-	o_orderkey = l_orderkey
-	and l_shipmode = 'SHIP'
-	and l_commitdate < l_receiptdate
-	and l_shipdate < l_commitdate
-	and l_receiptdate >= date '1995-01-01'
-	and l_receiptdate < date '1995-01-01' + interval '1' year
-group by
-	l_shipmode
-order by
-	l_shipmode;
-
--- Query: TPCH_Q14
-select
-	100.00 * sum(case
-		when p_type like 'PROMO%'
-			then l_extendedprice * (1 - l_discount)
-		else 0
-	end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
-from
-	lineitem,
-	part
-where
-	l_partkey = p_partkey
-	and l_shipdate >= date '1995-01-01'
-	and l_shipdate < date '1995-01-01' + interval '1' month;
-
 -- Query: oj_bug
 SELECT c_custkey, c_name, c_mktsegment, o_orderkey
 FROM customer FULL OUTER JOIN orders ON c_custkey = o_custkey
@@ -373,25 +319,6 @@ SELECT c_name, c_acctbal FROM customer WHERE c_mktsegment IN ('BUILDING', 'MACHI
 
 -- Query: nep
 SELECT l_shipmode, SUM(l_extendedprice) AS revenue FROM lineitem WHERE l_shipdate < '1994-01-01' AND l_quantity < 24 AND l_linenumber <> 4 AND l_returnflag <> 'R' GROUP BY l_shipmode LIMIT 100;
-
--- Query: F16
-SELECT
-    o_clerk,
-    AVG(2 * o_totalprice + 35.90) AS total_price,
-    c_acctbal,
-    n_name
-FROM orders, customer, nation
-WHERE
-    c_custkey = o_custkey
-    AND c_nationkey = n_nationkey
-    AND n_nationkey IN (1, 3, 5, 4, 10, 11)
-    AND c_acctbal < 7000
-    AND c_acctbal > 1000
-    AND o_totalprice > 2500
-    AND o_totalprice <= 15005.06
-    AND c_acctbal <= o_totalprice
-GROUP BY o_clerk, c_acctbal, n_name
-ORDER BY total_price DESC, o_clerk, c_acctbal, n_name;
 
 -- Query: A7
 SELECT
@@ -938,18 +865,9 @@ WHERE ps_suppkey = s_suppkey
   AND ps_comment <> 'dependencies'
   AND ps_comment <> 'hello world regular mina dependencies';
 
--- Query: F10
-select n_name, c_acctbal from nation, customer WHERE n_nationkey = c_nationkey and 
-  n_nationkey IN (1, 2, 3, 5, 4, 13, 14, 15) and c_acctbal < 7000 and c_acctbal > 1000 ORDER BY c_acctbal;
-
 -- Query: F11
 select n_name, c_acctbal from nation, customer where n_nationkey = c_nationkey and c_nationkey > 3 and 
   n_nationkey < 20 and c_nationkey != 10 and c_acctbal < 7000 LIMIT 200;
-
--- Query: F12
-select sum(l_extendedprice) as revenue from lineitem 
-  where l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year 
-  and (l_quantity < 10 or l_quantity between 24 and 42 or l_quantity >= 50);
 
 -- Query: F13
 select avg(ps_supplycost) as cost from part, partsupp where p_partkey = ps_partkey 
@@ -1006,15 +924,6 @@ SELECT r_name, n_name, s_name, ps_availqty FROM region LEFT OUTER JOIN nation ON
 -- Query: OJ4
 SELECT r_name, n_name, s_name, ps_availqty, p_name FROM region LEFT OUTER JOIN nation ON r_regionkey = n_regionkey LEFT OUTER JOIN supplier ON n_nationkey = s_nationkey LEFT OUTER JOIN partsupp ON s_suppkey = ps_suppkey LEFT OUTER JOIN part ON ps_partkey = p_partkey;
 
--- Query: OJ5
-SELECT r_name, n_name, s_name, ps_availqty, p_name, l_quantity FROM region LEFT OUTER JOIN nation ON r_regionkey = n_regionkey LEFT OUTER JOIN supplier ON n_nationkey = s_nationkey LEFT OUTER JOIN partsupp ON s_suppkey = ps_suppkey LEFT OUTER JOIN part ON ps_partkey = p_partkey LEFT OUTER JOIN lineitem ON p_partkey = l_partkey;
-
--- Query: OJ6
-SELECT r_name, n_name, s_name, ps_availqty, p_name, l_quantity, o_totalprice FROM region LEFT OUTER JOIN nation ON r_regionkey = n_regionkey LEFT OUTER JOIN supplier ON n_nationkey = s_nationkey LEFT OUTER JOIN partsupp ON s_suppkey = ps_suppkey LEFT OUTER JOIN part ON ps_partkey = p_partkey LEFT OUTER JOIN lineitem ON p_partkey = l_partkey LEFT OUTER JOIN orders ON l_orderkey = o_orderkey;
-
--- Query: OJ7
-SELECT r_name, n_name, s_name, ps_availqty, p_name, l_quantity, o_totalprice, c_name FROM region LEFT OUTER JOIN nation ON r_regionkey = n_regionkey LEFT OUTER JOIN supplier ON n_nationkey = s_nationkey LEFT OUTER JOIN partsupp ON s_suppkey = ps_suppkey LEFT OUTER JOIN part ON ps_partkey = p_partkey LEFT OUTER JOIN lineitem ON p_partkey = l_partkey LEFT OUTER JOIN orders ON l_orderkey = o_orderkey LEFT OUTER JOIN customer ON o_custkey = c_custkey;
-
 -- Query: DS1
 SELECT p_partkey, p_name, p_comment FROM part WHERE p_container IN ('SM CASE');
 
@@ -1047,9 +956,6 @@ SELECT p_partkey, p_name, p_comment FROM part WHERE p_container IN ('SM CASE', '
 
 -- Query: UK2
 (SELECT r_name, r_regionkey FROM region, nation, supplier, partsupp WHERE r_regionkey = n_regionkey AND n_nationkey = s_nationkey AND s_suppkey = ps_suppkey) UNION ALL (SELECT p_name, p_retailprice FROM part, lineitem, orders, customer WHERE p_partkey = l_partkey AND l_orderkey = o_orderkey AND o_custkey = c_custkey);
-
--- Query: UK3
-(SELECT r_name, r_regionkey FROM region, nation, supplier WHERE r_regionkey = n_regionkey AND n_nationkey = s_nationkey) UNION ALL (SELECT ps_comment, ps_supplycost FROM partsupp, part, lineitem WHERE ps_partkey = p_partkey AND p_partkey = l_partkey) UNION ALL (SELECT o_clerk, o_totalprice FROM orders, customer WHERE o_custkey = c_custkey);
 
 -- Query: UK4
 (SELECT r_name, r_regionkey FROM region, nation WHERE r_regionkey = n_regionkey) UNION ALL (SELECT s_name, s_acctbal FROM supplier, partsupp WHERE s_suppkey = ps_suppkey) UNION ALL (SELECT p_name, p_retailprice FROM part, lineitem WHERE p_partkey = l_partkey) UNION ALL (SELECT o_clerk, o_totalprice FROM orders, customer WHERE o_custkey = c_custkey);
@@ -1084,57 +990,6 @@ SELECT p_partkey, p_name, p_comment FROM part WHERE p_container IN ('SM CASE', '
 -- Query: UN8
 (SELECT s_name, s_acctbal FROM supplier, nation, region WHERE s_nationkey = n_nationkey AND n_regionkey = r_regionkey) UNION ALL (SELECT c_name, c_acctbal FROM customer, orders, lineitem WHERE c_custkey = o_custkey AND o_orderkey = l_orderkey) UNION ALL (SELECT p_name, p_retailprice FROM part, partsupp WHERE p_partkey = ps_partkey);
 
--- Query: T3B3
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales);
-
--- Query: T3B4
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales);
-
--- Query: T3B5
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page WHERE cs_catalog_page_sk = cp_catalog_page_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales);
-
--- Query: T3B6
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page WHERE cs_catalog_page_sk = cp_catalog_page_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site WHERE ws_web_site_sk = web_site_sk);
-
--- Query: T3B7
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store, household_demographics WHERE ss_store_sk = s_store_sk AND ss_hdemo_sk = hd_demo_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page WHERE cs_catalog_page_sk = cp_catalog_page_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site WHERE ws_web_site_sk = web_site_sk);
-
--- Query: T3B8
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store, household_demographics WHERE ss_store_sk = s_store_sk AND ss_hdemo_sk = hd_demo_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page, call_center WHERE cs_catalog_page_sk = cp_catalog_page_sk AND cs_call_center_sk = cc_call_center_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site WHERE ws_web_site_sk = web_site_sk);
-
--- Query: T3B9
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store, household_demographics WHERE ss_store_sk = s_store_sk AND ss_hdemo_sk = hd_demo_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page, call_center WHERE cs_catalog_page_sk = cp_catalog_page_sk AND cs_call_center_sk = cc_call_center_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site, web_page WHERE ws_web_site_sk = web_site_sk AND ws_web_page_sk = wp_web_page_sk);
-
--- Query: T3B10
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store, household_demographics, promotion WHERE ss_store_sk = s_store_sk AND ss_hdemo_sk = hd_demo_sk AND ss_promo_sk = p_promo_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page, call_center WHERE cs_catalog_page_sk = cp_catalog_page_sk AND cs_call_center_sk = cc_call_center_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site, web_page WHERE ws_web_site_sk = web_site_sk AND ws_web_page_sk = wp_web_page_sk);
-
--- Query: T3B11
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store, household_demographics, promotion WHERE ss_store_sk = s_store_sk AND ss_hdemo_sk = hd_demo_sk AND ss_promo_sk = p_promo_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page, call_center, ship_mode WHERE cs_catalog_page_sk = cp_catalog_page_sk AND cs_call_center_sk = cc_call_center_sk AND cs_ship_mode_sk = sm_ship_mode_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site, web_page WHERE ws_web_site_sk = web_site_sk AND ws_web_page_sk = wp_web_page_sk);
-
--- Query: T3B12
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store, household_demographics, promotion WHERE ss_store_sk = s_store_sk AND ss_hdemo_sk = hd_demo_sk AND ss_promo_sk = p_promo_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page, call_center, ship_mode WHERE cs_catalog_page_sk = cp_catalog_page_sk AND cs_call_center_sk = cc_call_center_sk AND cs_ship_mode_sk = sm_ship_mode_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site, web_page, customer_address WHERE ws_web_site_sk = web_site_sk AND ws_web_page_sk = wp_web_page_sk AND ws_bill_addr_sk = ca_address_sk);
-
--- Query: T6B6
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales) UNION ALL (SELECT sr_ticket_number, sr_return_amt FROM store_returns) UNION ALL (SELECT cr_order_number, cr_return_amount FROM catalog_returns) UNION ALL (SELECT wr_order_number, wr_return_amt FROM web_returns);
-
--- Query: T6B7
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales) UNION ALL (SELECT sr_ticket_number, sr_return_amt FROM store_returns) UNION ALL (SELECT cr_order_number, cr_return_amount FROM catalog_returns) UNION ALL (SELECT wr_order_number, wr_return_amt FROM web_returns);
-
--- Query: T6B8
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page WHERE cs_catalog_page_sk = cp_catalog_page_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales) UNION ALL (SELECT sr_ticket_number, sr_return_amt FROM store_returns) UNION ALL (SELECT cr_order_number, cr_return_amount FROM catalog_returns) UNION ALL (SELECT wr_order_number, wr_return_amt FROM web_returns);
-
--- Query: T6B9
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page WHERE cs_catalog_page_sk = cp_catalog_page_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site WHERE ws_web_site_sk = web_site_sk) UNION ALL (SELECT sr_ticket_number, sr_return_amt FROM store_returns) UNION ALL (SELECT cr_order_number, cr_return_amount FROM catalog_returns) UNION ALL (SELECT wr_order_number, wr_return_amt FROM web_returns);
-
--- Query: T6B10
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page WHERE cs_catalog_page_sk = cp_catalog_page_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site WHERE ws_web_site_sk = web_site_sk) UNION ALL (SELECT sr_ticket_number, sr_return_amt FROM store_returns, reason WHERE sr_reason_sk = r_reason_sk) UNION ALL (SELECT cr_order_number, cr_return_amount FROM catalog_returns) UNION ALL (SELECT wr_order_number, wr_return_amt FROM web_returns);
-
--- Query: T6B11
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page WHERE cs_catalog_page_sk = cp_catalog_page_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site WHERE ws_web_site_sk = web_site_sk) UNION ALL (SELECT sr_ticket_number, sr_return_amt FROM store_returns, reason WHERE sr_reason_sk = r_reason_sk) UNION ALL (SELECT cr_order_number, cr_return_amount FROM catalog_returns, call_center WHERE cr_call_center_sk = cc_call_center_sk) UNION ALL (SELECT wr_order_number, wr_return_amt FROM web_returns);
-
--- Query: T6B12
-(SELECT ss_ticket_number, ss_net_paid FROM store_sales, store WHERE ss_store_sk = s_store_sk) UNION ALL (SELECT cs_order_number, cs_net_paid FROM catalog_sales, catalog_page WHERE cs_catalog_page_sk = cp_catalog_page_sk) UNION ALL (SELECT ws_order_number, ws_net_paid FROM web_sales, web_site WHERE ws_web_site_sk = web_site_sk) UNION ALL (SELECT sr_ticket_number, sr_return_amt FROM store_returns, reason WHERE sr_reason_sk = r_reason_sk) UNION ALL (SELECT cr_order_number, cr_return_amount FROM catalog_returns, call_center WHERE cr_call_center_sk = cc_call_center_sk) UNION ALL (SELECT wr_order_number, wr_return_amt FROM web_returns, web_page WHERE wr_web_page_sk = wp_web_page_sk);
-
 -- Query: IJ1
 SELECT r_name, n_name FROM region INNER JOIN nation ON r_regionkey = n_regionkey;
 
@@ -1146,15 +1001,6 @@ SELECT r_name, n_name, s_name, ps_availqty FROM region INNER JOIN nation ON r_re
 
 -- Query: IJ4
 SELECT r_name, n_name, s_name, ps_availqty, p_name FROM region INNER JOIN nation ON r_regionkey = n_regionkey INNER JOIN supplier ON n_nationkey = s_nationkey INNER JOIN partsupp ON s_suppkey = ps_suppkey INNER JOIN part ON ps_partkey = p_partkey;
-
--- Query: IJ5
-SELECT r_name, n_name, s_name, ps_availqty, p_name, l_quantity FROM region INNER JOIN nation ON r_regionkey = n_regionkey INNER JOIN supplier ON n_nationkey = s_nationkey INNER JOIN partsupp ON s_suppkey = ps_suppkey INNER JOIN part ON ps_partkey = p_partkey INNER JOIN lineitem ON p_partkey = l_partkey;
-
--- Query: IJ6
-SELECT r_name, n_name, s_name, ps_availqty, p_name, l_quantity, o_totalprice FROM region INNER JOIN nation ON r_regionkey = n_regionkey INNER JOIN supplier ON n_nationkey = s_nationkey INNER JOIN partsupp ON s_suppkey = ps_suppkey INNER JOIN part ON ps_partkey = p_partkey INNER JOIN lineitem ON p_partkey = l_partkey INNER JOIN orders ON l_orderkey = o_orderkey;
-
--- Query: IJ7
-SELECT r_name, n_name, s_name, ps_availqty, p_name, l_quantity, o_totalprice, c_name FROM region INNER JOIN nation ON r_regionkey = n_regionkey INNER JOIN supplier ON n_nationkey = s_nationkey INNER JOIN partsupp ON s_suppkey = ps_suppkey INNER JOIN part ON ps_partkey = p_partkey INNER JOIN lineitem ON p_partkey = l_partkey INNER JOIN orders ON l_orderkey = o_orderkey INNER JOIN customer ON o_custkey = c_custkey;
 
 -- Query: DISJ1
 SELECT p_partkey, p_name, p_size FROM part WHERE p_size IN (3, 7, 15);
@@ -1216,42 +1062,3 @@ SELECT c_name, o_orderkey, o_totalprice FROM customer LEFT OUTER JOIN orders ON 
 -- Query: DISJ_UN4
 (SELECT p_partkey, p_name FROM part WHERE p_brand = 'Brand#12' OR p_brand = 'Brand#23' OR p_container = 'SM BOX') UNION ALL (SELECT ps_partkey, ps_comment FROM partsupp WHERE ps_availqty > 100 AND (ps_supplycost < 100.00 OR ps_supplycost > 900.00));
 
--- Query: demo
-(
-    SELECT
-        c_name AS entity_name,
-        n_name AS country,
-        o_totalprice AS price
-    FROM customer
-    RIGHT OUTER JOIN orders
-        ON c_custkey = o_custkey
-        AND c_acctbal >= o_totalprice
-        AND c_acctbal >= 9000
-    LEFT OUTER JOIN nation
-        ON c_nationkey = n_nationkey
-    WHERE o_totalprice <= 15000
-    GROUP BY n_name, c_name, o_totalprice
-    ORDER BY price, country, entity_name
-    LIMIT 10
-)
-
-UNION ALL
-
-(
-    SELECT
-        s_name AS entity_name,
-        n_name AS country,
-        AVG(l_extendedprice * (1 - l_discount)) AS price
-    FROM supplier, lineitem, orders, nation, region
-    WHERE l_suppkey = s_suppkey
-      AND l_orderkey = o_orderkey
-      AND s_nationkey = n_nationkey
-      AND n_regionkey = r_regionkey
-      AND (l_shipmode = 'AIR' OR l_shipmode = 'TRUCK')
-      AND r_name <> 'EUROPE'
-      AND o_totalprice >= s_acctbal
-      AND o_totalprice <= 15000
-    GROUP BY n_name, s_name
-    ORDER BY price DESC, country DESC, entity_name
-    LIMIT 20
-);
