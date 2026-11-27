@@ -94,15 +94,15 @@ def main():
     right_pos = ax_right.get_position()
     cut_x = (left_pos.x1 + right_pos.x0) / 2
     span = 0.045
-    axis_y = 0.968
-    thickness = 0.012
+    axis_y = 0.988
+    thickness = 0.008
     xs = cut_x - span / 2 + span * brace[:, 1]
     ys = axis_y + thickness * (brace[:, 0] - 0.5)
     fig.add_artist(Line2D(xs, ys, transform=fig.transFigure,
                           color="black", linewidth=1.5))
 
     handles, labels = ax_left.get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.955),
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.04),
                fontsize=8, ncol=2)
 
     fig.savefig(args.out, dpi=150)
