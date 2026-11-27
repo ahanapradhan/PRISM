@@ -15,7 +15,9 @@ def get_format_args(msg, args):
 
 class Log(logging.Logger):
     # creating a formatter
-    formatter = logging.Formatter('%(asctime)s- %(name)s - %(levelname)-8s: %(message)s')
+    # Include the source line number that emitted the record.
+    formatter = logging.Formatter(
+        '%(asctime)s- %(name)s[l:%(lineno)d] - %(levelname)-8s: %(message)s')
 
     def __init__(self, name, level):
         super().__init__(name, level)
@@ -31,18 +33,20 @@ class Log(logging.Logger):
         self.removeHandler(fh)
         fh.close()
 
+    # stacklevel=2 makes %(filename)s/%(lineno)d point at the caller of these
+    # wrappers instead of at this file.
     def debug(self, msg, *args):
         f_msg, f_args = get_format_args(msg, args)
-        super().debug(f_msg, *f_args)
+        super().debug(f_msg, *f_args, stacklevel=2)
 
     def error(self, msg, *args):
         f_msg, f_args = get_format_args(msg, args)
-        super().error(f_msg, *f_args)
+        super().error(f_msg, *f_args, stacklevel=2)
 
     def info(self, msg, *args):
         f_msg, f_args = get_format_args(msg, args)
-        super().info(f_msg, *f_args)
+        super().info(f_msg, *f_args, stacklevel=2)
 
     def warning(self, msg, *args):
         f_msg, f_args = get_format_args(msg, args)
-        super().info(f_msg, *f_args)
+        super().info(f_msg, *f_args, stacklevel=2)

@@ -42,6 +42,17 @@ class Config:
         self.detect_oj = False
         self.use_cs2 = False
         self.scale_down = False
+        # Disjunction/CNF extraction mode scaffolding (step 1, inert by default).
+        # 'legacy' preserves current detect_or behavior.
+        self.disjunction_mode = "legacy"
+        # Step 7 diagnostics/hardening knobs (optional, safe defaults).
+        self.disjunction_max_iters = 10000
+        self.disjunction_max_routes = 128
+        self.disjunction_diagnostics = True
+        # Minimizer selection: view (default), copy, pk, hybrid.
+        self.minimizer = "view"
+        # Backup/restore method: native (pgcopy binary, fallback to threaded), threaded, serial.
+        self.backup_method = "native"
         self.app_type = ApplicationType.SQL_ERR_FWD
         self.database = "postgres"
         self.table_sizes_dict = {}
@@ -110,6 +121,61 @@ class Config:
             self.detect_or = False
         elif detect_or.lower() == "yes":
             self.detect_or = True
+
+        # Optional scaffolding flag for future CNF disjunction implementation.
+        # Kept backward-compatible: missing/unknown values default to legacy.
+        try:
+            disjunction_mode = config_object.get(FEATURE_SECTION, "disjunction_mode", fallback="legacy")
+            if str(disjunction_mode).lower() in ("legacy", "cnf", "robust"):
+                self.disjunction_mode = str(disjunction_mode).lower()
+            else:
+                self.disjunction_mode = "legacy"
+        except Exception:
+            self.disjunction_mode = "legacy"
+        # Optional Step 7 diagnostics/hardening config (safe defaults on missing/invalid).
+        try:
+            self.disjunction_max_iters = max(1, int(config_object.get(FEATURE_SECTION, "disjunction_max_iters", fallback=self.disjunction_max_iters)))
+        except Exception:
+            self.disjunction_max_iters = 10000
+        try:
+            self.disjunction_max_routes = max(1, int(config_object.get(FEATURE_SECTION, "disjunction_max_routes", fallback=self.disjunction_max_routes)))
+        except Exception:
+            self.disjunction_max_routes = 128
+        try:
+            diag = config_object.get(FEATURE_SECTION, "disjunction_diagnostics", fallback="yes")
+            self.disjunction_diagnostics = str(diag).lower() not in ("no", "false", "0", "off")
+        except Exception:
+            self.disjunction_diagnostics = True
+        try:
+            minimizer = str(config_object.get(FEATURE_SECTION, "minimizer", fallback=self.minimizer)).lower().strip()
+            aliases = {
+                "view": "view",
+                "view_minimizer": "view",
+                "copy": "copy",
+                "copy_based": "copy",
+                "copybased": "copy",
+                "pk": "pk",
+                "pk_view": "pk",
+                "pkview": "pk",
+                "hybrid": "hybrid",
+            }
+            self.minimizer = aliases.get(minimizer, "view")
+        except Exception:
+            self.minimizer = "view"
+        try:
+            backup_method = str(config_object.get(FEATURE_SECTION, "backup_method", fallback=self.backup_method)).lower().strip()
+            aliases = {
+                "native": "native",
+                "pgcopy": "native",
+                "threaded": "threaded",
+                "parallel": "threaded",
+                "python": "threaded",
+                "serial": "serial",
+                "insert": "serial",
+            }
+            self.backup_method = aliases.get(backup_method, "native")
+        except Exception:
+            self.backup_method = "native"
 
         detect_oj = config_object.get(FEATURE_SECTION, DETECT_OJ)
         if detect_oj.lower() == "no":

@@ -86,7 +86,6 @@ Install an IDE (optional), e.g. [PyCharm Community Edition](https://www.jetbrain
 | `sympy` | 1.4 |
 | `psycopg2` | 2.9.3 |
 | `numpy` | 1.22.4 |
-| `django` | 4.2.4 |
 |frozenlist | >=1.3.3 |
 | pandas | >=1.5,<3 |
 | tabulate |>=0.8.10 |
@@ -113,7 +112,7 @@ Two files in the `mysite` directory control the setup:
 | `database` | Your database credentials. |
 | `support` | Support file name. The file must be in the same directory as `config.ini`. |
 | `logging` | Log level: `DEBUG` (developer mode), `INFO`, or `ERROR`. |
-| `feature` | Flags for advanced features: `UNION`, `OUTER JOIN`, `<>` / `!=` in arithmetic filter predicates, and `IN`. |
+| `feature` | Flags for advanced features: `UNION`, `OUTER JOIN`, `<>` / `!=` in arithmetic filter predicates, and `IN`. Also supports `minimizer` (valid values: `view`, `copy`, `pk`, `hybrid`; default: `view`) and `backup_method` (valid values: `native`, `threaded`, `serial`; default: `native`). |
 | `options` | Extractor options. E.g. the maximum `LIMIT` value is 1000; set `limit=value` to raise it. |
 
 ---
@@ -121,6 +120,12 @@ Two files in the `mysite` directory control the setup:
 ## Running PRISM
 
 The entry point is `mysite/unmasque/src/main_cmd.py`. It ships with one default input query and a workload list, each entry identified by a `qid`. Sample queries are in the `test.util` package (`queries.py`). To test more queries, add them to the workload.
+
+PRISM has been tested on the queries given in [SQL_workload.sql](SQL_workload.sql), which contains every query defined in `main_cmd.py`.
+
+### Per-query timings
+
+![PRISM pipeline stage timings per query](mysite/unmasque/test/extractions/timings_per_query.png)
 
 ### Command line
 
@@ -135,18 +140,6 @@ python -m unmasque.src.main_cmd <qid>
 Run the `main` function in `main_cmd.py`.
 
 > `main_cmd.py` uses relative imports. If this causes import errors when running from an IDE, change them to absolute imports.
-
-### GUI (no longer maintained)
-
-> The Django-based UI is **no longer maintained** and may not work with current code. Prefer the command line or an IDE. Django is not needed for those.
-
-If you still want to try it, install Django (see [Python Environment](#2-python-environment)), then from inside the `unmasque` folder:
-
-```bash
-python3 manage.py runserver
-```
-
-Once the server is up on port 8080, open <http://localhost:8080/unmasque/>.
 
 ---
 
@@ -200,6 +193,8 @@ constant   ::= number | date | string
 ```
 
 > `HAVING` support is added within the flat scope. It is not integrated with the newer PRISM features.
+
+> **Note (Spurious ORDER BY):** When a query has an `ORDER BY` prefix whose values are tied in the probe database, rows tied under that prefix have no SQL-defined order unless the hidden query specifies additional `ORDER BY` keys. In this case, OrderBy may occasionally infer a spurious secondary `ORDER BY` column if the observed tied-prefix row order appears stable across its probes. This is a black-box ambiguity: without inspecting the query, accidental physical/plan ordering among tied-prefix rows can be indistinguishable from a true secondary `ORDER BY`.
 
 ---
 

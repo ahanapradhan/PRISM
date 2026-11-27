@@ -216,6 +216,99 @@ class Filter(UN2WhereClause):
             val1 = truncate_value(val1, un_precision)
             filterAttribs.append((tabname, attrib, '>=', float(round_ceil(val1, un_precision)), float(max_val_domain)))
 
+        elif min_present and max_present:
+            # Both domain extremes satisfy: either unconstrained or a disjunctive
+            # (gap) predicate (e.g. x < 100 OR x > 900). Probe candidate points to
+            # find any value that violates the query (inside a gap); if found,
+            # extract the contiguous satisfying interval around dmin_val as one
+            # disjunct and let the disjunction loop discover other branches.
+            f_min = float(get_cast_value('float', min_val_domain))
+            f_max = float(get_cast_value('float', max_val_domain))
+            f_d = float(float_dmin_val)
+            gap_point = None
+
+            def _probe_gap(val):
+                try:
+                    fv = float(val)
+                except Exception:
+                    return None
+                if fv <= f_min or fv >= f_max:
+                    return None
+                try:
+                    present = self.checkAttribValueEffect(query, fv, attrib_list)
+                except Exception:
+                    return None
+                return fv if not present else None
+
+            candidates = []
+            try:
+                candidates.append(get_mid_val('float', f_max, f_min))
+            except Exception:
+                pass
+            try:
+                candidates.append(get_mid_val('float', f_d, f_min))
+            except Exception:
+                pass
+            try:
+                candidates.append(get_mid_val('float', f_max, f_d))
+            except Exception:
+                pass
+            # Geometric offsets from dmin_val to catch gaps far from midpoints.
+            for step in [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 50000, 100000, 500000, 1000000]:
+                candidates.extend([f_d - step, f_d + step])
+            # Domain-aware fractional probes (no arbitrary fixed constants).
+            try:
+                span = f_max - f_min
+                if span > 0:
+                    for frac in [0.125, 0.25, 0.375, 0.625, 0.75, 0.875]:
+                        candidates.append(f_min + span * frac)
+            except Exception:
+                pass
+
+            seen = set()
+            for c in candidates:
+                if c is None:
+                    continue
+                try:
+                    cf = float(c)
+                except Exception:
+                    continue
+                # normalize key to avoid excessive duplicate probes
+                key = round(cf, 6)
+                if key in seen:
+                    continue
+                seen.add(key)
+                gp = _probe_gap(cf)
+                if gp is not None:
+                    gap_point = gp
+                    break
+
+            if gap_point is None:
+                return
+
+            f_g = float(gap_point)
+            if f_d >= f_g:
+                # dmin_val in satisfying region above gap
+                val_lo = self.get_filter_value(query, 'float', f_g, f_d, '>=', attrib_list)
+                # upper side: search toward max only if we can bound by a bad point;
+                # max domain was present, so contiguous region reaches max unless
+                # another (undetected) gap exists above - treat as max in that case.
+                hi = f_max
+                lo = float(round_ceil(truncate_value(float(val_lo), un_precision), un_precision))
+                hi_out = float(round_floor(truncate_value(float(hi), un_precision), un_precision))
+                if lo <= f_min and hi_out >= f_max:
+                    return
+                filterAttribs.append((tabname, attrib, 'range', lo, hi_out))
+            else:
+                # dmin_val in satisfying region below gap
+                val_hi = self.get_filter_value(query, 'float', f_d, f_g, '<=', attrib_list)
+                lo = f_min
+                lo_out = float(round_ceil(truncate_value(float(lo), un_precision), un_precision))
+                hi_out = float(round_floor(truncate_value(float(val_hi), un_precision), un_precision))
+                if lo_out <= f_min and hi_out >= f_max:
+                    return
+                filterAttribs.append((tabname, attrib, 'range', lo_out, hi_out))
+
     def get_filter_value(self, query, datatype, min_val, max_val, operator, attrib_list):
         query_front_set = set()
         for tab_attrib in attrib_list:
@@ -316,6 +409,91 @@ class Filter(UN2WhereClause):
                                         get_val_plus_delta(datatype, get_cast_value(datatype, min_val_domain), -1),
                                         int_dmin_val, '>=', attrib_list)
             filterAttribs.append((tabname, attrib, '>=', val, max_val_domain))
+
+        elif min_present and max_present:
+            # Both domain extremes satisfy: either unconstrained or a disjunctive
+            # (gap) predicate. Probe candidates to find a value violating the
+            # query; if found, extract contiguous satisfying interval around dmin_val.
+            try:
+                d_min_cast = get_cast_value(datatype, min_val_domain)
+                d_max_cast = get_cast_value(datatype, max_val_domain)
+                d_dmin_cast = get_cast_value(datatype, int_dmin_val)
+            except Exception:
+                return
+
+            def _probe_gap_pt(val):
+                if val is None:
+                    return None
+                try:
+                    present = self.checkAttribValueEffect(query, get_format(datatype, val), attrib_list)
+                except Exception:
+                    return None
+                return val if not present else None
+
+            candidates = []
+            try:
+                candidates.append(get_mid_val(datatype, d_max_cast, d_min_cast))
+            except Exception:
+                pass
+            try:
+                candidates.append(get_mid_val(datatype, d_dmin_cast, d_min_cast))
+            except Exception:
+                pass
+            try:
+                candidates.append(get_mid_val(datatype, d_max_cast, d_dmin_cast))
+            except Exception:
+                pass
+            delta, _ = get_constants_for(datatype)
+            for step in [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 5000, 10000]:
+                try:
+                    candidates.append(get_val_plus_delta(datatype, d_dmin_cast, -step * delta))
+                    candidates.append(get_val_plus_delta(datatype, d_dmin_cast, step * delta))
+                except Exception:
+                    pass
+            # Domain-aware fractional probes (no arbitrary fixed constants).
+            try:
+                span = d_max_cast - d_min_cast
+                if datatype == 'date':
+                    span_days = span.days if hasattr(span, 'days') else int(span)
+                    for frac_num, frac_den in [(1, 4), (3, 4), (1, 8), (7, 8), (1, 16), (15, 16)]:
+                        offset = (span_days * frac_num) // frac_den
+                        candidates.append(get_val_plus_delta(datatype, d_min_cast, offset))
+                elif span is not None:
+                    for frac_num, frac_den in [(1, 4), (3, 4), (1, 8), (7, 8), (1, 16), (15, 16)]:
+                        offset = (span * frac_num) // frac_den if datatype in INT_TYPES else (span * frac_num / frac_den)
+                        candidates.append(get_val_plus_delta(datatype, d_min_cast, offset))
+            except Exception:
+                pass
+
+            gap_point = None
+            seen = set()
+            for c in candidates:
+                try:
+                    key = str(c)
+                except Exception:
+                    key = repr(c)
+                if key in seen:
+                    continue
+                seen.add(key)
+                gp = _probe_gap_pt(c)
+                if gp is not None:
+                    gap_point = gp
+                    break
+            if gap_point is None:
+                return
+
+            if get_cast_value(datatype, d_dmin_cast) >= get_cast_value(datatype, gap_point):
+                val_lo = self.get_filter_value(query, datatype, gap_point, d_dmin_cast, '>=', attrib_list)
+                hi = d_max_cast
+                if val_lo == d_min_cast and hi == d_max_cast:
+                    return
+                filterAttribs.append((tabname, attrib, 'range', val_lo, hi))
+            else:
+                val_hi = self.get_filter_value(query, datatype, d_dmin_cast, gap_point, '<=', attrib_list)
+                lo = d_min_cast
+                if lo == d_min_cast and val_hi == d_max_cast:
+                    return
+                filterAttribs.append((tabname, attrib, 'range', lo, val_hi))
 
     def handle_string_filter(self, attrib, filterAttribs, tabname, query):
         # STRING HANDLING

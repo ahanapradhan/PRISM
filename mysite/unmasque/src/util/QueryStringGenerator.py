@@ -29,6 +29,7 @@ class QueryDetails:
         self.all_aoa = []
         self.join_edges = []
         self.or_predicates = []
+        self.cnf = None
 
         self.projection_names = []
         self.global_projected_attributes = []
@@ -54,6 +55,7 @@ class QueryDetails:
         self.global_projected_attributes = other.global_projected_attributes
         self.global_groupby_attributes = other.global_groupby_attributes
         self.global_aggregated_attributes = other.global_aggregated_attributes
+        self.cnf = getattr(other, 'cnf', None)
 
     def add_to_where_op(self, predicate):
         if self.where_op and predicate not in self.where_op:
@@ -77,14 +79,22 @@ class QueryDetails:
         to_remove = []
         for ar_fil in self.arithmetic_filters:
             for fl_in in self.filter_in_predicates:
-                if get_tab(ar_fil) == get_tab(fl_in) and get_attrib(ar_fil) == get_attrib(fl_in):
-                    op = get_op(ar_fil)
-                    if op in ['=', 'equal'] and get_LB(ar_fil) in get_LB(fl_in):
-                        to_remove.append(ar_fil)
-                    elif op == 'range' and (get_LB(ar_fil), get_UB(ar_fil)) in get_LB(fl_in):
-                        to_remove.append(ar_fil)
+                try:
+                    if fl_in and str(fl_in[2]).upper() in ('OR_CLAUSE', 'OR') and fl_in[0] == '__OR_CLAUSE__':
+                        continue
+                    if get_tab(ar_fil) == get_tab(fl_in) and get_attrib(ar_fil) == get_attrib(fl_in):
+                        op = get_op(ar_fil)
+                        if op in ['=', 'equal'] and get_LB(ar_fil) in get_LB(fl_in):
+                            to_remove.append(ar_fil)
+                        elif op == 'range' and (get_LB(ar_fil), get_UB(ar_fil)) in get_LB(fl_in):
+                            to_remove.append(ar_fil)
+                except Exception:
+                    continue
         for t_r in to_remove:
-            self.arithmetic_filters.remove(t_r)
+            try:
+                self.arithmetic_filters.remove(t_r)
+            except Exception:
+                pass
 
 
 def get_formatted_value(datatype, value):
@@ -188,6 +198,7 @@ class QueryStringGenerator:
     @algebraic_predicates.setter
     def algebraic_predicates(self, aoa):
         self._workingCopy.eq_join_predicates = aoa.algebraic_eq_predicates
+        self._workingCopy.join_edges = []
         for pred in aoa.aoa_less_thans:
             self._workingCopy.all_aoa.append((pred[0], '<', pred[1]))
         for pred in aoa.aoa_predicates:
@@ -229,9 +240,34 @@ class QueryStringGenerator:
                                                              min(neg_val[0][0], neg_val[1][0]),
                                                              max(neg_val[1][1], neg_val[0][1])))
         else:
-            for pred in remnants.filter_in_predicates:
+            # Sync arithmetic filters from context when available so cleaned-up
+            # disjunction handling (e.g. cross-column OR clauses) is reflected.
+            if hasattr(remnants, 'arithmetic_filters'):
+                try:
+                    self._workingCopy.arithmetic_filters = copy.deepcopy(list(remnants.arithmetic_filters))
+                except Exception:
+                    pass
+            for pred in getattr(remnants, 'filter_in_predicates', []) or []:
                 if pred not in self._workingCopy.filter_in_predicates:
                     self._workingCopy.filter_in_predicates.append(pred)
+            # Remove standalone predicates that are constituents of cross-column OR clauses.
+            or_constituents = set()
+            for pred in self._workingCopy.filter_in_predicates:
+                try:
+                    if pred and str(pred[2]).upper() in ('OR_CLAUSE', 'OR') and pred[0] == '__OR_CLAUSE__':
+                        for cp in (pred[3] or []):
+                            if cp:
+                                or_constituents.add(tuple(cp) if not isinstance(cp, tuple) else cp)
+                except Exception:
+                    continue
+            if or_constituents:
+                self._workingCopy.arithmetic_filters = [
+                    af for af in self._workingCopy.arithmetic_filters
+                    if (tuple(af) if not isinstance(af, tuple) else af) not in or_constituents
+                ]
+            # B13 (guarded): carry CNF for route-aware rendering/diagnostics when present.
+            if getattr(remnants, 'cnf', None) is not None:
+                self._workingCopy.cnf = remnants.cnf
         self._workingCopy.optimize_arithmetic_filters()
 
     @property
@@ -252,6 +288,30 @@ class QueryStringGenerator:
     @algebraic_inequalities.setter
     def algebraic_inequalities(self, value):
         raise NotImplementedError
+
+    @property
+    def global_projected_attributes(self):
+        return self._workingCopy.global_projected_attributes
+
+    @global_projected_attributes.setter
+    def global_projected_attributes(self, value):
+        self._workingCopy.global_projected_attributes = list(value)
+
+    @property
+    def global_groupby_attributes(self):
+        return self._workingCopy.global_groupby_attributes
+
+    @global_groupby_attributes.setter
+    def global_groupby_attributes(self, value):
+        self._workingCopy.global_groupby_attributes = list(value)
+
+    @property
+    def global_aggregated_attributes(self):
+        return self._workingCopy.global_aggregated_attributes
+
+    @global_aggregated_attributes.setter
+    def global_aggregated_attributes(self, value):
+        self._workingCopy.global_aggregated_attributes = [tuple(agg) for agg in value]
 
     @property
     def join_edges(self):
@@ -328,6 +388,10 @@ class QueryStringGenerator:
                 continue
             key = (elt[0], elt[1], elt[2])
             value = elt[3]
+            # An empty string here is a probe artifact (see
+            # _extract_nep_op_info), not a value excluded by the query.
+            if value in ('', None):
+                continue
             if key not in nep_dict.keys():
                 nep_dict[key] = [value]
             else:
@@ -347,6 +411,22 @@ class QueryStringGenerator:
         for pred in t_remove:
             self._workingCopy.arithmetic_filters.remove(pred)
         return t_remove
+
+    def strip_spurious_nep_filters(self):
+        """Drop '<> empty' predicates left behind by NEP string probes.
+
+        They are harmless semantically but are probe artifacts, not query
+        predicates, so they must not appear in the final extracted query.
+        They are kept until this point because the NEP loop uses query changes
+        as its progress signal.
+        """
+        self.logger.debug("STRIP BEFORE: ", self._workingCopy.arithmetic_filters)
+        self._workingCopy.arithmetic_filters = [
+            pred for pred in self._workingCopy.arithmetic_filters
+            if not (len(pred) >= 4 and pred[2] in ('<>', '!=')
+                    and pred[3] in ('', None))
+        ]
+        self.logger.debug("STRIP AFTER: ", self._workingCopy.arithmetic_filters)
 
     def rewrite_for_NEP(self):
         t_remove = self.__consolidate_nep_filters_for_not_in()
@@ -435,6 +515,23 @@ class QueryStringGenerator:
             predicate = self.__generate_predicate_string_for_in_operator(tab, attrib, lb)
             predicate = f"({predicate})" if "OR" in predicate else predicate
             return predicate
+        if op in ('or_clause', 'or'):
+            parts = []
+            for sub in (lb or []):
+                if not sub:
+                    continue
+                try:
+                    sp = self.formulate_predicate_from_filter(sub)
+                except Exception:
+                    sp = ''
+                if sp:
+                    parts.append(sp)
+            if not parts:
+                return ''
+            if len(parts) == 1:
+                return parts[0]
+            return '(' + ' OR '.join(parts) + ')'
+
         datatype = self.get_datatype((tab, attrib))
         f_lb = get_formatted_value(datatype, lb)
         f_ub = get_formatted_value(datatype, ub)
@@ -598,8 +695,7 @@ class QueryStringGenerator:
         u_query = self.connectionHelper.queries.update_tab_attrib_with_quoted_value(tabname, attrib, temp)
         try:
             self.connectionHelper.execute_sql([u_query], self.logger)
-            new_result = self.app.doJob(query)
-            if self.app.isQ_result_no_full_nullfree_row(new_result):
+            if self.app.is_query_result_no_full_nullfree_row(query):
                 output = output + '%'
         except Exception as e:
             self.logger.debug(e)
@@ -624,16 +720,14 @@ class QueryStringGenerator:
 
             try:
                 self.connectionHelper.execute_sql([u_query])
-                new_result = self.app.doJob(query)
-                if self.app.isQ_result_empty(new_result):
+                if self.app.is_query_result_no_full_nullfree_row(query):
                     temp = copy.deepcopy(representative)
                     temp = temp[:index] + temp[index + 1:]
 
                     u_query = self.connectionHelper.queries.update_tab_attrib_with_quoted_value(tabname, attrib, temp)
                     try:
                         self.connectionHelper.execute_sql([u_query])
-                        new_result = self.app.doJob(query)
-                        if self.app.isQ_result_no_full_nullfree_row(new_result):
+                        if self.app.is_query_result_no_full_nullfree_row(query):
                             representative = representative[:index] + representative[index + 1:]
                         else:
                             output = output + "_"
@@ -666,8 +760,7 @@ class QueryStringGenerator:
             u_query = self.connectionHelper.queries.update_tab_attrib_with_quoted_value(tabname, attrib, temp_str)
             try:
                 self.connectionHelper.execute_sql([u_query])
-                new_result = self.app.doJob(query)
-                if self.app.isQ_result_no_full_nullfree_row(new_result):
+                if self.app.is_query_result_no_full_nullfree_row(query):
                     pass
                 else:
                     output = output + representative[index]

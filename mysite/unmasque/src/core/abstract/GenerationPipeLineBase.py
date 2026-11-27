@@ -8,8 +8,10 @@ from frozenlist._frozenlist import FrozenList
 
 from .MutationPipeLineBase import MutationPipeLineBase
 from ..dataclass.genPipeline_context import GenPipelineContext
-from ...util.constants import NON_TEXT_TYPES
-from ...util.utils import get_unused_dummy_val, get_dummy_val_for, get_format, get_char, get_escape_string
+from ...util.constants import NON_TEXT_TYPES, NUMERIC_TYPES
+from ...util.utils import (get_unused_dummy_val, get_dummy_val_for, get_format, get_char,
+                           get_escape_string, get_min_and_max_val, get_val_plus_delta)
+from ...util.aoa_utils import get_constants_for
 from ....src.core.abstract.abstractConnection import AbstractConnectionHelper
 
 
@@ -35,6 +37,7 @@ class GenerationPipeLineBase(MutationPipeLineBase):
 
     def __init__(self, connectionHelper: AbstractConnectionHelper, name: str, genCtx: GenPipelineContext):
         super().__init__(connectionHelper, genCtx.core_relations, genCtx.global_min_instance_dict, name)
+        self._gen_ctx = genCtx
         self.global_all_attribs = genCtx.global_all_attribs
         self.global_attrib_types = genCtx.global_attrib_types
         self.global_join_graph = genCtx.global_join_graph
@@ -44,6 +47,10 @@ class GenerationPipeLineBase(MutationPipeLineBase):
         self.joined_attribs = genCtx.joined_attribs
         self.filter_in_predicates = genCtx.filter_in_predicates
         self.get_datatype = genCtx.get_datatype  # method
+        # B13: CNF route awareness (guarded; defaults to legacy behavior when absent)
+        self.cnf = getattr(genCtx, 'cnf', None)
+        self.cnf_route = getattr(genCtx, 'cnf_route', None)
+        self.cnf_pin_values = copy.deepcopy(getattr(genCtx, 'cnf_pin_values', {}) or {})
 
     def extract_params_from_args(self, args):
         return args[0]
@@ -89,16 +96,6 @@ class GenerationPipeLineBase(MutationPipeLineBase):
             self.connectionHelper.execute_sql_with_params(insert_query, insert_rows, self.logger)
         else:
             self.connectionHelper.execute_sql_with_params(insert_query, insert_rows)
-
-    def insert_attrib_vals_into_table_many(self, att_order, attrib_list_inner,
-                                           insert_rows, tabname_inner, insert_logger=False) -> None:
-        if not insert_rows:
-            return
-        esc_string = get_escape_string(attrib_list_inner)
-        insert_query = self.connectionHelper.queries.insert_into_tab_attribs_format(
-            att_order, esc_string, self.get_fully_qualified_table_name(tabname_inner))
-        logger = self.logger if insert_logger else None
-        self.connectionHelper.execute_sql_many(insert_query, insert_rows, logger)
 
     def update_attrib_in_table(self, attrib, value, tabname) -> None:
         update_query = self.connectionHelper.queries.update_tab_attrib_with_value(
@@ -146,12 +143,21 @@ class GenerationPipeLineBase(MutationPipeLineBase):
                     self.get_fully_qualified_table_name(tabname), attrib, val)
         self.connectionHelper.execute_sql([update_q])
 
+    def get_cnf_pinned_or_none(self, tabname: str, attrib: str):
+        pin = getattr(self, 'cnf_pin_values', None) or {}
+        return pin.get((tabname, attrib), None)
+
     def get_s_val(self, attrib: str, tabname: str) -> Union[int, float, date, str]:
+        # B13: prefer CNF-pinned route value when available.
+        getter = getattr(self, 'get_cnf_pinned_or_none', None)
+        pinned = getter(tabname, attrib) if callable(getter) else GenerationPipeLineBase.get_cnf_pinned_or_none(self, tabname, attrib)
+        if pinned is not None:
+            return pinned
         datatype = self.get_datatype((tabname, attrib))
         if datatype in NON_TEXT_TYPES:
-            if (tabname, attrib) in self.filter_attrib_dict.keys():
-                lb = self.filter_attrib_dict[(tabname, attrib)][0]
-                val = get_boundary_value(lb, is_ub=False)
+            if self.has_probe_bounds(tabname, attrib, datatype):
+                val = self.get_s_value_within_bounds(tabname, attrib, datatype=datatype,
+                                                     prefer='lb')
             else:
                 val = get_dummy_val_for(datatype)
             # val = ast.literal_eval(get_format(datatype, val))
@@ -167,24 +173,183 @@ class GenerationPipeLineBase(MutationPipeLineBase):
     def get_other_than_dmin_val_nonText(self, attrib: str, tabname: str, prev) -> Union[int, float, date, str]:
         key = (tabname, attrib)
         datatype = self.get_datatype(key)
-        if key not in self.filter_attrib_dict:
+        if not self.has_probe_bounds(tabname, attrib, datatype):
             return get_dummy_val_for(datatype)
 
-        if len(self.filter_attrib_dict[key]) == 1:
+        lb, ub = self.get_effective_bounds(tabname, attrib, datatype)
+        if lb == ub:
             self.logger.info("Cannot generate a new s-val. Giving the old one!")
             return prev
-
-        lb, ub = self.filter_attrib_dict[key][0], self.filter_attrib_dict[key][-1]
-        lb = get_boundary_value(lb, is_ub=False)
-        ub = get_boundary_value(ub, is_ub=True)
         val = ub if prev == lb else lb
+        if val == prev:
+            val = ub
         return val
+
+    def get_aoa_implied_bounds(self, tabname: str, attrib: str, datatype: str):
+        """Return (lb, ub) implied by every AOA-derived bound on an attribute.
+
+        A concrete bound that AOA absorbed into a variable edge is removed from
+        `arithmetic_filters`/`filter_attrib_dict`, but it is still a real query
+        bound and must constrain generated probe data.  Strict `<` predicates
+        are tightened by one datatype delta.
+        """
+        i_min, i_max = get_min_and_max_val(datatype)
+        lb, ub = i_min, i_max
+        gen_ctx = getattr(self, "_gen_ctx", None)
+        if gen_ctx is None:
+            return lb, ub
+        key = (tabname, attrib)
+        try:
+            delta, _ = get_constants_for(datatype)
+        except Exception:
+            delta = 1
+
+        for val in (getattr(gen_ctx, '_absorbed_LBs', None) or {}).get(key, []) or []:
+            if val is not None and val > lb:
+                lb = val
+        for val in (getattr(gen_ctx, '_absorbed_UBs', None) or {}).get(key, []) or []:
+            if val is not None and val < ub:
+                ub = val
+
+        le_preds = getattr(gen_ctx, "global_aoa_le_predicates", []) or []
+        l_preds = getattr(gen_ctx, "global_aoa_l_predicates", []) or []
+
+        def _current_val(attrib):
+            if not isinstance(attrib, tuple):
+                return attrib
+            tab, col = attrib[0], attrib[1]
+            try:
+                fqtn = self.get_fully_qualified_table_name(tab)
+                val = self.connectionHelper.execute_sql_fetchone_0(
+                    self.connectionHelper.queries.select_attribs_from_relation([col], fqtn))
+                if val is not None:
+                    return val
+            except Exception:
+                pass
+            return self.get_dmin_val(col, tab)
+
+        for pred in le_preds:
+            l_attrib, r_attrib = pred[0], pred[1]
+            if r_attrib == key:
+                l_val = _current_val(l_attrib)
+                if l_val is not None and l_val > lb:
+                    lb = l_val
+            if l_attrib == key:
+                r_val = _current_val(r_attrib)
+                if r_val is not None and r_val < ub:
+                    ub = r_val
+        for pred in l_preds:
+            l_attrib, r_attrib = pred[0], pred[1]
+            if r_attrib == key:
+                l_val = _current_val(l_attrib)
+                if l_val is not None:
+                    strict_lb = get_val_plus_delta(datatype, l_val, delta)
+                    if strict_lb > lb:
+                        lb = strict_lb
+            if l_attrib == key:
+                r_val = _current_val(r_attrib)
+                if r_val is not None:
+                    strict_ub = get_val_plus_delta(datatype, r_val, -delta)
+                    if strict_ub < ub:
+                        ub = strict_ub
+
+        # A concrete bound absorbed into both sides of a strict `<` edge can
+        # make the independent lower/upper choices equal. Tighten the edge
+        # sides once more so two generated boundary values still satisfy `<`.
+        for pred in l_preds:
+            if pred[1] == key:
+                strict_lb = get_val_plus_delta(datatype, lb, delta)
+                if lb <= strict_lb <= ub:
+                    lb = strict_lb
+            if pred[0] == key:
+                strict_ub = get_val_plus_delta(datatype, ub, -delta)
+                if lb <= strict_ub <= ub:
+                    ub = strict_ub
+        return lb, ub
+
+    @staticmethod
+    def _filter_bound_pair(value):
+        """Extract (lb, ub) from a filter-dict value without assuming a 2-tuple."""
+        if isinstance(value, FrozenList):
+            values = list(value)
+        elif isinstance(value, (list, tuple)):
+            values = list(value)
+        else:
+            return value, value
+        if not values:
+            return None, None
+        return (get_boundary_value(values[0], is_ub=False),
+                get_boundary_value(values[-1], is_ub=True))
+
+    def get_effective_bounds(self, tabname: str, attrib: str, datatype=None):
+        """Single source of truth for probe-data bounds on one attribute."""
+        key = (tabname, attrib)
+        datatype = datatype or self.get_datatype(key)
+        i_min, i_max = get_min_and_max_val(datatype)
+        lb, ub = i_min, i_max
+
+        if key in self.filter_attrib_dict:
+            filter_lb, filter_ub = self._filter_bound_pair(self.filter_attrib_dict[key])
+            if filter_lb is not None and filter_lb > lb:
+                lb = filter_lb
+            if filter_ub is not None and filter_ub < ub:
+                ub = filter_ub
+
+        aoa_lb, aoa_ub = self.get_aoa_implied_bounds(tabname, attrib, datatype)
+        if aoa_lb > lb:
+            lb = aoa_lb
+        if aoa_ub < ub:
+            ub = aoa_ub
+        return lb, ub
+
+    def has_probe_bounds(self, tabname: str, attrib: str, datatype=None) -> bool:
+        datatype = datatype or self.get_datatype((tabname, attrib))
+        i_min, i_max = get_min_and_max_val(datatype)
+        lb, ub = self.get_effective_bounds(tabname, attrib, datatype)
+        return lb != i_min or ub != i_max
+
+    def get_s_value_within_bounds(self, tabname: str, attrib: str, datatype=None,
+                                  prefer: str = 'lb', delta=0, prev=None):
+        """Generate one probe value that satisfies all extracted bounds."""
+        pinned = self.get_cnf_pinned_or_none(tabname, attrib)
+        if pinned is not None:
+            return pinned
+        datatype = datatype or self.get_datatype((tabname, attrib))
+        if datatype not in NON_TEXT_TYPES:
+            return self.get_s_val_for_textType(attrib, tabname)
+
+        lb, ub = self.get_effective_bounds(tabname, attrib, datatype)
+        if lb > ub:
+            # Conflicting bounds should not happen for a valid query. Prefer
+            # the concrete absorbed/filter bound over an AOA-implied one.
+            lb, ub = ub, lb
+        val = lb if prefer == 'lb' else ub
+        val = get_val_plus_delta(datatype, val, delta)
+        if val > ub:
+            val = ub
+        if val < lb:
+            val = lb
+        if prev is not None and val == prev and lb != ub:
+            other = ub if val == lb else lb
+            other = get_val_plus_delta(datatype, other, delta)
+            if lb <= other <= ub:
+                val = other
+        return val
+
+    def get_s_value_plus_delta_within_bounds(self, tabname: str, attrib: str,
+                                             datatype, delta, prev=None):
+        """Generate a distinct probe value while staying inside all bounds."""
+        pinned = self.get_cnf_pinned_or_none(tabname, attrib)
+        if pinned is not None:
+            return pinned
+        return self.get_s_value_within_bounds(tabname, attrib, datatype=datatype,
+                                              prefer='lb', delta=delta, prev=prev)
 
     def get_different_s_val(self, attrib: str, tabname: str, prev) -> Union[int, float, date, str]:
         datatype = self.get_datatype((tabname, attrib))
         self.logger.debug(f"datatype of {attrib} is {datatype}")
         if datatype in NON_TEXT_TYPES:
-            if (tabname, attrib) in self.filter_attrib_dict.keys():
+            if self.has_probe_bounds(tabname, attrib, datatype):
                 val = self.get_other_than_dmin_val_nonText(attrib, tabname, prev)
             else:
                 val = get_unused_dummy_val(datatype, [prev])
@@ -203,3 +368,123 @@ class GenerationPipeLineBase(MutationPipeLineBase):
         for tab_key in self.global_all_attribs.keys():
             if find_attrib in self.global_all_attribs[tab_key]:
                 return tab_key
+
+    # ---- CNF/route-aware probe helpers (guarded; legacy no-op when CNF absent) ----
+    def has_structured_cnf(self) -> bool:
+        try:
+            from ..disjunction.routes import has_cnf_routes
+            return has_cnf_routes(getattr(self, 'cnf', None))
+        except Exception:
+            return False
+
+    def set_cnf_probe_route(self, route, sync_context: bool = True):
+        if not self.has_structured_cnf() or route is None:
+            self.cnf_route = None
+            self.cnf_pin_values = {}
+        else:
+            try:
+                from ..disjunction.routes import route_pin_values
+                self.cnf_route = route
+                self.cnf_pin_values = route_pin_values(route) or {}
+            except Exception:
+                self.cnf_route = route
+                self.cnf_pin_values = {}
+        if sync_context and getattr(self, '_gen_ctx', None) is not None:
+            try:
+                self._gen_ctx.cnf_route = self.cnf_route
+                self._gen_ctx.cnf_pin_values = copy.deepcopy(self.cnf_pin_values)
+            except Exception:
+                pass
+        return self.cnf_pin_values
+
+    def get_cnf_freeing_route_for_attr(self, attr):
+        if not self.has_structured_cnf():
+            return None
+        try:
+            from ..disjunction.filter_structure import select_freeing_route_for_attr
+            return select_freeing_route_for_attr(self.cnf, attr)
+        except Exception:
+            return None
+
+    def get_cnf_attr_domain(self, attr, route=None):
+        if not self.has_structured_cnf():
+            return None
+        try:
+            from ..disjunction.filter_structure import Domain, attr_domain_under_route
+            route = self.cnf_route if route is None else route
+            return attr_domain_under_route(self.cnf, route, attr, global_domain=Domain(kind='free'))
+        except Exception:
+            return None
+
+    def get_cnf_distinct_values(self, attr, count=2, route=None, fallback=None):
+        if not self.has_structured_cnf():
+            return list((fallback or [])[:count])
+        try:
+            from ..disjunction.filter_structure import sample_values_from_domain
+            domain = self.get_cnf_attr_domain(attr, route=route)
+            vals = sample_values_from_domain(domain, count=count, fallback=fallback)
+            return vals if vals else list((fallback or [])[:count])
+        except Exception:
+            return list((fallback or [])[:count])
+
+    def save_db_values_for_attrs(self, attrs):
+        saved = {}
+        for tab, col in attrs or []:
+            try:
+                prev = self.connectionHelper.execute_sql_fetchone_0(
+                    self.connectionHelper.queries.select_attribs_from_relation([col], tab))
+                saved[(tab, col)] = prev
+            except Exception:
+                pass
+        return saved
+
+    def restore_db_values_for_attrs(self, saved):
+        for (tab, col), val in (saved or {}).items():
+            try:
+                self.update_with_val(col, tab, val)
+            except Exception:
+                try:
+                    self.update_attrib_in_table(col, val, tab)
+                except Exception:
+                    pass
+
+    def apply_cnf_route_to_db(self, route=None, attrs=None):
+        """Apply CNF route pin values to DB and return restore state.
+        Returns (saved_values, prev_route, prev_pin_values). No-op when CNF absent."""
+        prev_route = self.cnf_route
+        prev_pins = copy.deepcopy(getattr(self, 'cnf_pin_values', {}) or {})
+        if not self.has_structured_cnf():
+            return {}, prev_route, prev_pins
+        if route is None:
+            route = self.cnf_route
+        if route is None:
+            return {}, prev_route, prev_pins
+        try:
+            from ..disjunction.routes import route_pin_values
+            pin_values = route_pin_values(route) or {}
+        except Exception:
+            pin_values = {}
+        target_attrs = list(attrs) if attrs is not None else list(pin_values.keys())
+        saved = self.save_db_values_for_attrs(target_attrs)
+        self.set_cnf_probe_route(route, sync_context=True)
+        for (tab, col), val in pin_values.items():
+            if attrs is not None and (tab, col) not in attrs:
+                continue
+            if val is None:
+                continue
+            try:
+                self.update_with_val(col, tab, val)
+            except Exception:
+                pass
+        return saved, prev_route, prev_pins
+
+    def restore_cnf_probe_state(self, saved_values, prev_route, prev_pin_values, sync_context: bool = True):
+        self.restore_db_values_for_attrs(saved_values)
+        self.cnf_route = prev_route
+        self.cnf_pin_values = copy.deepcopy(prev_pin_values or {})
+        if sync_context and getattr(self, '_gen_ctx', None) is not None:
+            try:
+                self._gen_ctx.cnf_route = self.cnf_route
+                self._gen_ctx.cnf_pin_values = copy.deepcopy(self.cnf_pin_values)
+            except Exception:
+                pass

@@ -1,0 +1,550 @@
+minimizer,run,iteration,table,total_cost,limit_cost,scan_node,scan_cost,scan_rows
+CopyBasedMinimizer,1,1,lineitem,148173773.12,881643.44,Seq Scan,67733.32,1250132
+CopyBasedMinimizer,1,2,lineitem,86089890.43,508504.32,Seq Scan,33898.94,625094
+CopyBasedMinimizer,1,3,lineitem,85161126.88,482886.83,Seq Scan,16949.35,312535
+CopyBasedMinimizer,1,4,lineitem,8518545983.13,433334.94,Seq Scan,10661.12,374912
+CopyBasedMinimizer,1,5,lineitem,93898.37,56758.56,Seq Scan,4236.84,78084
+CopyBasedMinimizer,1,6,lineitem,89769.35,54437.46,Seq Scan,2279.22,55122
+CopyBasedMinimizer,1,7,lineitem,86125.43,53129.25,Seq Scan,1364.59,46859
+CopyBasedMinimizer,1,8,lineitem,21379935.95,51653.91,Seq Scan,682.55,23455
+CopyBasedMinimizer,1,9,lineitem,10708920.87,47149.27,Seq Scan,373.18,11718
+CopyBasedMinimizer,1,10,lineitem,5373785.14,44929.21,Seq Scan,186.5,5850
+CopyBasedMinimizer,1,11,lineitem,2700717.51,43813.21,Seq Scan,93.1,2910
+CopyBasedMinimizer,1,12,lineitem,1366196.08,43225.1,Seq Scan,46.42,1442
+CopyBasedMinimizer,1,13,lineitem,768795.61,42980.63,Seq Scan,23.85,785
+CopyBasedMinimizer,1,14,lineitem,419798.8,42983.42,Seq Scan,12.04,404
+CopyBasedMinimizer,1,15,lineitem,270493.88,42987.33,Seq Scan,10.41,241
+CopyBasedMinimizer,1,16,lineitem,46479.32,42214.04,Seq Scan,3.09,109
+CopyBasedMinimizer,1,17,lineitem,37472.91,37066.29,Seq Scan,1.54,54
+CopyBasedMinimizer,1,18,lineitem,34168.41,33966.36,Seq Scan,1.27,27
+CopyBasedMinimizer,1,19,lineitem,31644.59,31541.01,Seq Scan,1.14,14
+CopyBasedMinimizer,1,20,lineitem,36716.72,36666.19,Seq Scan,1.07,7
+CopyBasedMinimizer,1,21,lineitem,29493.7,29465.9,Seq Scan,1.04,4
+CopyBasedMinimizer,1,22,lineitem,29007.86,28995.21,Seq Scan,1.02,2
+CopyBasedMinimizer,1,23,lineitem,20297.49,20292.42,Seq Scan,1.01,1
+CopyBasedMinimizer,1,24,orders,18673.65,18673.65,Seq Scan,16500.37,312437
+CopyBasedMinimizer,1,25,orders,9869.25,9869.25,Seq Scan,8281.88,156188
+CopyBasedMinimizer,1,26,orders,5467.2,5467.2,Seq Scan,4172.73,78072
+CopyBasedMinimizer,1,27,orders,3017.38,3017.38,Seq Scan,2664.5,93650
+CopyBasedMinimizer,1,28,orders,1476.89,1476.89,Seq Scan,1299.65,46765
+CopyBasedMinimizer,1,29,orders,770.69,770.69,Seq Scan,681.07,23307
+CopyBasedMinimizer,1,30,orders,418.9,418.9,Seq Scan,372.35,11635
+CopyBasedMinimizer,1,31,orders,212.19,212.19,Seq Scan,186.3,5830
+CopyBasedMinimizer,1,32,orders,108.91,108.91,Seq Scan,93.06,2906
+CopyBasedMinimizer,1,33,orders,58.54,58.54,Seq Scan,46.98,1498
+CopyBasedMinimizer,1,34,orders,34.33,34.33,Seq Scan,24.14,814
+CopyBasedMinimizer,1,35,orders,20.9,20.9,Seq Scan,11.43,343
+CopyBasedMinimizer,1,36,orders,15.13,15.13,Seq Scan,5.7,170
+CopyBasedMinimizer,1,37,orders,12.58,12.58,Seq Scan,3.13,113
+CopyBasedMinimizer,1,38,orders,10.92,10.92,Seq Scan,1.29,29
+CopyBasedMinimizer,1,39,orders,10.73,10.73,Seq Scan,1.15,15
+CopyBasedMinimizer,1,40,orders,10.65,10.65,Seq Scan,1.07,7
+CopyBasedMinimizer,1,41,orders,10.59,10.59,Seq Scan,1.04,4
+CopyBasedMinimizer,1,42,orders,10.54,10.54,Seq Scan,1.02,2
+CopyBasedMinimizer,1,43,orders,10.52,10.52,Seq Scan,1.01,1
+CopyBasedMinimizer,1,44,customer,2833.35,2833.35,Seq Scan,2793.4,3030
+CopyBasedMinimizer,1,45,customer,1449.42,1449.42,Seq Scan,1428.42,1514
+CopyBasedMinimizer,1,46,customer,758.26,758.26,Seq Scan,746.7,759
+CopyBasedMinimizer,1,47,customer,380.58,380.58,Seq Scan,373.75,381
+CopyBasedMinimizer,1,48,customer,191.36,191.36,Seq Scan,186.91,190
+CopyBasedMinimizer,1,49,customer,96.65,96.65,Seq Scan,93.39,95
+CopyBasedMinimizer,1,50,customer,49.67,49.67,Seq Scan,47.0,48
+CopyBasedMinimizer,1,51,customer,26.1,26.1,Seq Scan,23.71,25
+CopyBasedMinimizer,1,52,customer,14.27,14.27,Seq Scan,12.11,7
+CopyBasedMinimizer,1,53,customer,8.17,8.17,Seq Scan,6.04,5
+CopyBasedMinimizer,1,54,customer,5.11,5.11,Seq Scan,3.01,2
+CopyBasedMinimizer,1,55,customer,3.61,3.61,Seq Scan,1.52,1
+CopyBasedMinimizer,1,56,customer,3.33,3.33,Seq Scan,1.25,1
+CopyBasedMinimizer,1,57,customer,3.21,3.21,Seq Scan,1.12,1
+CopyBasedMinimizer,1,58,customer,3.14,3.14,Seq Scan,1.06,1
+CopyBasedMinimizer,1,59,customer,3.12,3.12,Seq Scan,1.04,1
+CopyBasedMinimizer,1,60,customer,3.11,3.11,Seq Scan,1.02,1
+CopyBasedMinimizer,2,1,lineitem,138643129.75,829692.04,Seq Scan,67734.84,1250284
+CopyBasedMinimizer,2,2,lineitem,86783934.83,512144.76,Seq Scan,33898.53,625052
+CopyBasedMinimizer,2,3,lineitem,87462903.61,494962.98,Seq Scan,16948.68,312468
+CopyBasedMinimizer,2,4,lineitem,8520384780.95,433403.26,Seq Scan,10661.38,374938
+CopyBasedMinimizer,2,5,lineitem,94091.06,56803.0,Seq Scan,4236.74,78074
+CopyBasedMinimizer,2,6,lineitem,89853.97,54504.66,Seq Scan,2279.05,55105
+CopyBasedMinimizer,2,7,lineitem,85880.42,53067.96,Seq Scan,1364.24,46824
+CopyBasedMinimizer,2,8,lineitem,21404539.06,51568.91,Seq Scan,682.82,23482
+CopyBasedMinimizer,2,9,lineitem,10708968.92,47107.75,Seq Scan,373.18,11718
+CopyBasedMinimizer,2,10,lineitem,5372997.55,44877.15,Seq Scan,186.49,5849
+CopyBasedMinimizer,2,11,lineitem,2704639.36,43755.05,Seq Scan,93.14,2914
+CopyBasedMinimizer,2,12,lineitem,3631.92,3631.92,Seq Scan,46.92,1492
+CopyBasedMinimizer,2,13,lineitem,1974.29,1974.29,Seq Scan,23.87,787
+CopyBasedMinimizer,2,14,lineitem,1072.99,1072.99,Seq Scan,12.08,408
+CopyBasedMinimizer,2,15,lineitem,700.73,700.73,Seq Scan,10.44,244
+CopyBasedMinimizer,2,16,lineitem,289.53,289.53,Seq Scan,3.09,109
+CopyBasedMinimizer,2,17,lineitem,152.31,152.31,Seq Scan,1.54,54
+CopyBasedMinimizer,2,18,lineitem,96.65,96.65,Seq Scan,1.28,28
+CopyBasedMinimizer,2,19,lineitem,63.47,63.47,Seq Scan,1.14,14
+CopyBasedMinimizer,2,20,lineitem,41.9,41.9,Seq Scan,1.07,7
+CopyBasedMinimizer,2,21,lineitem,24.13,24.13,Seq Scan,1.04,4
+CopyBasedMinimizer,2,22,lineitem,14.69,14.69,Seq Scan,1.02,2
+CopyBasedMinimizer,2,23,lineitem,9.96,9.96,Seq Scan,1.01,1
+CopyBasedMinimizer,2,24,orders,18674.08,18674.08,Seq Scan,16500.68,312468
+CopyBasedMinimizer,2,25,orders,9869.71,9869.71,Seq Scan,8282.22,156222
+CopyBasedMinimizer,2,26,orders,5467.46,5467.46,Seq Scan,4172.91,78091
+CopyBasedMinimizer,2,27,orders,3017.97,3017.97,Seq Scan,2664.93,93693
+CopyBasedMinimizer,2,28,orders,1541.0,1541.0,Seq Scan,1363.73,46773
+CopyBasedMinimizer,2,29,orders,772.0,772.0,Seq Scan,682.03,23403
+CopyBasedMinimizer,2,30,orders,420.3,420.3,Seq Scan,373.38,11738
+CopyBasedMinimizer,2,31,orders,212.45,212.45,Seq Scan,186.49,5849
+CopyBasedMinimizer,2,32,orders,109.24,109.24,Seq Scan,93.31,2931
+CopyBasedMinimizer,2,33,orders,58.01,58.01,Seq Scan,46.56,1456
+CopyBasedMinimizer,2,34,orders,33.43,33.43,Seq Scan,23.39,739
+CopyBasedMinimizer,2,35,orders,21.52,21.52,Seq Scan,12.0,400
+CopyBasedMinimizer,2,36,orders,15.09,15.09,Seq Scan,5.68,168
+CopyBasedMinimizer,2,37,orders,12.58,12.58,Seq Scan,3.13,113
+CopyBasedMinimizer,2,38,orders,10.9,10.9,Seq Scan,1.28,28
+CopyBasedMinimizer,2,39,orders,10.81,10.81,Seq Scan,1.14,14
+CopyBasedMinimizer,2,40,orders,10.65,10.65,Seq Scan,1.07,7
+CopyBasedMinimizer,2,41,orders,10.59,10.59,Seq Scan,1.04,4
+CopyBasedMinimizer,2,42,orders,10.54,10.54,Seq Scan,1.02,2
+CopyBasedMinimizer,2,43,orders,10.52,10.52,Seq Scan,1.01,1
+CopyBasedMinimizer,2,44,customer,2833.32,2833.32,Seq Scan,2793.38,3030
+CopyBasedMinimizer,2,45,customer,1449.45,1449.45,Seq Scan,1428.45,1514
+CopyBasedMinimizer,2,46,customer,757.82,757.82,Seq Scan,746.29,757
+CopyBasedMinimizer,2,47,customer,380.19,380.19,Seq Scan,373.39,379
+CopyBasedMinimizer,2,48,customer,191.04,191.04,Seq Scan,186.61,189
+CopyBasedMinimizer,2,49,customer,96.33,96.33,Seq Scan,93.38,71
+CopyBasedMinimizer,2,50,customer,49.69,49.69,Seq Scan,47.01,49
+CopyBasedMinimizer,2,51,customer,25.55,25.55,Seq Scan,23.19,23
+CopyBasedMinimizer,2,52,customer,13.84,13.84,Seq Scan,11.62,12
+CopyBasedMinimizer,2,53,customer,8.17,8.17,Seq Scan,6.04,5
+CopyBasedMinimizer,2,54,customer,5.13,5.13,Seq Scan,3.01,4
+CopyBasedMinimizer,2,55,customer,3.59,3.59,Seq Scan,1.51,1
+CopyBasedMinimizer,2,56,customer,3.33,3.33,Seq Scan,1.25,1
+CopyBasedMinimizer,2,57,customer,3.21,3.21,Seq Scan,1.12,1
+CopyBasedMinimizer,2,58,customer,3.16,3.16,Seq Scan,1.06,2
+CopyBasedMinimizer,2,59,customer,3.13,3.13,Seq Scan,1.04,2
+CopyBasedMinimizer,2,60,customer,3.11,3.11,Seq Scan,1.02,1
+CopyBasedMinimizer,3,1,lineitem,140404856.7,839133.79,Seq Scan,67732.48,1250048
+CopyBasedMinimizer,3,2,lineitem,84713309.1,501283.7,Seq Scan,33898.82,625082
+CopyBasedMinimizer,3,3,lineitem,83882975.02,476183.73,Seq Scan,16948.94,312494
+CopyBasedMinimizer,3,4,lineitem,8520851635.26,433418.78,Seq Scan,10661.26,374926
+CopyBasedMinimizer,3,5,lineitem,94033.69,56787.27,Seq Scan,4236.78,78078
+CopyBasedMinimizer,3,6,lineitem,90239.72,54594.48,Seq Scan,2279.22,55122
+CopyBasedMinimizer,3,7,lineitem,86136.66,53128.68,Seq Scan,1364.42,46842
+CopyBasedMinimizer,3,8,lineitem,21411821.26,51549.39,Seq Scan,682.9,23490
+CopyBasedMinimizer,3,9,lineitem,10730724.4,47164.78,Seq Scan,373.42,11742
+CopyBasedMinimizer,3,10,lineitem,5432011.43,44931.19,Seq Scan,187.14,5914
+CopyBasedMinimizer,3,11,lineitem,2753592.64,43800.13,Seq Scan,93.68,2968
+CopyBasedMinimizer,3,12,lineitem,1418946.57,43240.59,Seq Scan,47.0,1500
+CopyBasedMinimizer,3,13,lineitem,772455.53,42976.61,Seq Scan,23.89,789
+CopyBasedMinimizer,3,14,lineitem,423458.72,42979.37,Seq Scan,12.08,408
+CopyBasedMinimizer,3,15,lineitem,274153.8,42983.17,Seq Scan,10.45,245
+CopyBasedMinimizer,3,16,lineitem,46475.32,42210.04,Seq Scan,3.09,109
+CopyBasedMinimizer,3,17,lineitem,35508.36,35101.73,Seq Scan,1.54,54
+CopyBasedMinimizer,3,18,lineitem,34167.19,33965.14,Seq Scan,1.27,27
+CopyBasedMinimizer,3,19,lineitem,31643.26,31539.69,Seq Scan,1.14,14
+CopyBasedMinimizer,3,20,lineitem,27206.36,27155.83,Seq Scan,1.07,7
+CopyBasedMinimizer,3,21,lineitem,29492.1,29464.3,Seq Scan,1.04,4
+CopyBasedMinimizer,3,22,lineitem,29003.32,28990.67,Seq Scan,1.02,2
+CopyBasedMinimizer,3,23,lineitem,20296.92,20291.85,Seq Scan,1.01,1
+CopyBasedMinimizer,3,24,orders,18674.43,18674.43,Seq Scan,16500.94,312494
+CopyBasedMinimizer,3,25,orders,9869.71,9869.71,Seq Scan,8282.22,156222
+CopyBasedMinimizer,3,26,orders,5467.5,5467.5,Seq Scan,4172.94,78094
+CopyBasedMinimizer,3,27,orders,3018.54,3018.54,Seq Scan,2665.34,93734
+CopyBasedMinimizer,3,28,orders,1542.23,1542.23,Seq Scan,1364.63,46863
+CopyBasedMinimizer,3,29,orders,772.57,772.57,Seq Scan,682.44,23444
+CopyBasedMinimizer,3,30,orders,420.53,420.53,Seq Scan,373.55,11755
+CopyBasedMinimizer,3,31,orders,212.43,212.43,Seq Scan,186.48,5848
+CopyBasedMinimizer,3,32,orders,109.15,109.15,Seq Scan,93.24,2924
+CopyBasedMinimizer,3,33,orders,58.07,58.07,Seq Scan,46.61,1461
+CopyBasedMinimizer,3,34,orders,33.35,33.35,Seq Scan,23.32,732
+CopyBasedMinimizer,3,35,orders,21.47,21.47,Seq Scan,11.96,396
+CopyBasedMinimizer,3,36,orders,15.69,15.69,Seq Scan,6.27,227
+CopyBasedMinimizer,3,37,orders,12.58,12.58,Seq Scan,3.13,113
+CopyBasedMinimizer,3,38,orders,11.11,11.11,Seq Scan,1.58,58
+CopyBasedMinimizer,3,39,orders,10.92,10.92,Seq Scan,1.29,29
+CopyBasedMinimizer,3,40,orders,10.73,10.73,Seq Scan,1.15,15
+CopyBasedMinimizer,3,41,orders,10.65,10.65,Seq Scan,1.07,7
+CopyBasedMinimizer,3,42,orders,10.59,10.59,Seq Scan,1.04,4
+CopyBasedMinimizer,3,43,orders,10.54,10.54,Seq Scan,1.02,2
+CopyBasedMinimizer,3,44,customer,2833.31,2833.31,Seq Scan,2793.36,3030
+CopyBasedMinimizer,3,45,customer,1449.78,1449.78,Seq Scan,1428.78,1515
+CopyBasedMinimizer,3,46,customer,757.92,757.92,Seq Scan,746.38,758
+CopyBasedMinimizer,3,47,customer,380.23,380.23,Seq Scan,373.41,380
+CopyBasedMinimizer,3,48,customer,191.14,191.14,Seq Scan,186.7,190
+CopyBasedMinimizer,3,49,customer,96.35,96.35,Seq Scan,93.39,71
+CopyBasedMinimizer,3,50,customer,49.53,49.53,Seq Scan,46.86,48
+CopyBasedMinimizer,3,51,customer,25.55,25.55,Seq Scan,23.25,18
+CopyBasedMinimizer,3,52,customer,13.72,13.72,Seq Scan,11.57,6
+CopyBasedMinimizer,3,53,customer,8.17,8.17,Seq Scan,6.04,5
+CopyBasedMinimizer,3,54,customer,5.12,5.12,Seq Scan,3.0,4
+CopyBasedMinimizer,3,55,customer,3.59,3.59,Seq Scan,1.51,1
+CopyBasedMinimizer,3,56,customer,3.33,3.33,Seq Scan,1.25,1
+CopyBasedMinimizer,3,57,customer,3.21,3.21,Seq Scan,1.12,1
+CopyBasedMinimizer,3,58,customer,3.14,3.14,Seq Scan,1.06,1
+CopyBasedMinimizer,3,59,customer,3.12,3.12,Seq Scan,1.04,1
+CopyBasedMinimizer,3,60,customer,3.09,3.09,Seq Scan,1.01,1
+ViewMinimizer,1,1,lineitem,5490870979.16,480368.67,Index Scan,675.89,15003
+ViewMinimizer,1,2,lineitem,4646988791.66,469549.67,Index Scan,675.89,7502
+ViewMinimizer,1,3,lineitem,7375757980.88,378261.57,Index Scan,675.89,3751
+ViewMinimizer,1,4,lineitem,5112028069.61,298580.9,Index Scan,675.89,1876
+ViewMinimizer,1,5,lineitem,4439246887.56,276103.2,Index Scan,675.89,938
+ViewMinimizer,1,6,lineitem,4116123102.56,265365.68,Index Scan,675.89,469
+ViewMinimizer,1,7,lineitem,3961176774.47,260247.12,Index Scan,675.89,235
+ViewMinimizer,1,8,lineitem,2062737132.87,188818.12,Tid Range Scan,671.18,23517
+ViewMinimizer,1,9,lineitem,1039522429.97,150305.75,Tid Range Scan,337.72,11772
+ViewMinimizer,1,10,lineitem,4099422.79,42440.73,Tid Range Scan,170.99,5899
+ViewMinimizer,1,11,lineitem,2082701.95,42441.12,Tid Range Scan,87.63,2963
+ViewMinimizer,1,12,lineitem,1073654.68,42441.9,Tid Range Scan,45.95,1494
+ViewMinimizer,1,13,lineitem,588020.6,42443.3,Tid Range Scan,25.88,787
+ViewMinimizer,1,14,lineitem,327000.86,42446.06,Tid Range Scan,15.07,407
+ViewMinimizer,1,15,lineitem,215037.13,42449.89,Tid Range Scan,10.44,244
+ViewMinimizer,1,16,lineitem,46153.76,42193.13,Tid Range Scan,7.35,135
+ViewMinimizer,1,17,lineitem,42920.02,41343.59,Tid Range Scan,5.55,54
+ViewMinimizer,1,18,lineitem,20292.75,20289.57,,,
+ViewMinimizer,1,19,lineitem,20292.34,20289.17,,,
+ViewMinimizer,1,20,lineitem,20292.13,20288.96,,,
+ViewMinimizer,1,21,lineitem,20292.03,20288.85,,,
+ViewMinimizer,1,22,lineitem,20291.98,20288.81,,,
+ViewMinimizer,1,23,orders,18595.69,18595.34,Bitmap Heap Scan,16781.88,3750
+ViewMinimizer,1,24,orders,12777.39,12777.39,Tid Range Scan,10423.35,375034
+ViewMinimizer,1,25,orders,6432.89,6432.89,Tid Range Scan,5214.59,187559
+ViewMinimizer,1,26,orders,3260.47,3260.47,Tid Range Scan,2610.22,93821
+ViewMinimizer,1,27,orders,1673.8,1673.8,Tid Range Scan,1307.25,46924
+ViewMinimizer,1,28,orders,879.58,879.58,Tid Range Scan,655.76,23476
+ViewMinimizer,1,29,orders,484.4,484.4,Tid Range Scan,330.8,11779
+ViewMinimizer,1,30,orders,279.92,279.92,Tid Range Scan,168.32,5931
+ViewMinimizer,1,31,orders,155.47,155.47,Tid Range Scan,85.25,2924
+ViewMinimizer,1,32,orders,85.64,85.64,Tid Range Scan,44.63,1462
+ViewMinimizer,1,33,orders,53.03,53.03,Tid Range Scan,24.32,731
+ViewMinimizer,1,34,orders,31.41,31.41,Tid Range Scan,14.94,394
+ViewMinimizer,1,35,orders,18.11,18.11,Tid Range Scan,8.69,169
+ViewMinimizer,1,36,orders,16.57,16.57,Tid Range Scan,7.13,112
+ViewMinimizer,1,37,orders,15.08,15.08,Tid Range Scan,5.57,56
+ViewMinimizer,1,38,orders,11.38,11.38,,,
+ViewMinimizer,1,39,orders,10.94,10.94,,,
+ViewMinimizer,1,40,orders,10.73,10.73,,,
+ViewMinimizer,1,41,orders,10.61,10.61,,,
+ViewMinimizer,1,42,orders,10.57,10.57,,,
+ViewMinimizer,1,43,orders,10.54,10.54,,,
+ViewMinimizer,1,44,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,45,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,46,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,47,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,48,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,49,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,50,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,51,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,52,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,53,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,1,54,customer,9.13,9.13,Tid Range Scan,7.04,2
+ViewMinimizer,1,55,customer,7.6,7.6,Tid Range Scan,5.52,1
+ViewMinimizer,1,56,customer,3.78,3.78,,,
+ViewMinimizer,1,57,customer,3.43,3.43,,,
+ViewMinimizer,1,58,customer,3.26,3.26,,,
+ViewMinimizer,1,59,customer,3.17,3.17,,,
+ViewMinimizer,1,60,customer,3.13,3.13,,,
+ViewMinimizer,2,1,lineitem,5490878496.91,480367.77,Index Scan,675.89,15003
+ViewMinimizer,2,2,lineitem,4646992653.16,469548.72,Index Scan,675.89,7502
+ViewMinimizer,2,3,lineitem,7375687728.86,378257.23,Index Scan,675.89,3751
+ViewMinimizer,2,4,lineitem,5112085252.85,298580.79,Index Scan,675.89,1876
+ViewMinimizer,2,5,lineitem,4439272632.2,276102.05,Index Scan,675.89,938
+ViewMinimizer,2,6,lineitem,4116135374.72,265364.09,Index Scan,675.89,469
+ViewMinimizer,2,7,lineitem,3961182591.66,260245.31,Index Scan,675.89,235
+ViewMinimizer,2,8,lineitem,2062824313.2,188819.4,Tid Range Scan,671.19,23518
+ViewMinimizer,2,9,lineitem,1039522428.98,150303.75,Tid Range Scan,337.73,11772
+ViewMinimizer,2,10,lineitem,5453216.09,42975.06,Tid Range Scan,171.0,5899
+ViewMinimizer,2,11,lineitem,2763841.5,42975.45,Tid Range Scan,87.63,2963
+ViewMinimizer,2,12,lineitem,1418238.25,42976.22,Tid Range Scan,45.95,1494
+ViewMinimizer,2,13,lineitem,771542.55,42977.62,Tid Range Scan,25.88,788
+ViewMinimizer,2,14,lineitem,422546.74,42980.39,Tid Range Scan,15.07,407
+ViewMinimizer,2,15,lineitem,273238.82,42984.21,Tid Range Scan,10.44,244
+ViewMinimizer,2,16,lineitem,46606.6,42341.31,Tid Range Scan,7.09,109
+ViewMinimizer,2,17,lineitem,43675.07,41568.35,Tid Range Scan,5.55,54
+ViewMinimizer,2,18,lineitem,20297.91,20292.83,,,
+ViewMinimizer,2,19,lineitem,20297.5,20292.43,,,
+ViewMinimizer,2,20,lineitem,20297.29,20292.22,,,
+ViewMinimizer,2,21,lineitem,20297.2,20292.13,,,
+ViewMinimizer,2,22,lineitem,20297.14,20292.07,,,
+ViewMinimizer,2,23,orders,18597.91,18596.61,Bitmap Heap Scan,16781.52,3750
+ViewMinimizer,2,24,orders,12778.81,12778.81,Tid Range Scan,10423.51,375050
+ViewMinimizer,2,25,orders,6433.51,6433.51,Tid Range Scan,5214.61,187561
+ViewMinimizer,2,26,orders,3260.68,3260.68,Tid Range Scan,2610.16,93816
+ViewMinimizer,2,27,orders,1673.81,1673.81,Tid Range Scan,1307.16,46915
+ViewMinimizer,2,28,orders,879.53,879.53,Tid Range Scan,655.66,23465
+ViewMinimizer,2,29,orders,484.34,484.34,Tid Range Scan,330.69,11768
+ViewMinimizer,2,30,orders,279.84,279.84,Tid Range Scan,168.2,5920
+ViewMinimizer,2,31,orders,156.98,156.98,Tid Range Scan,86.96,2995
+ViewMinimizer,2,32,orders,91.92,91.92,Tid Range Scan,46.34,1533
+ViewMinimizer,2,33,orders,54.5,54.5,Tid Range Scan,26.03,802
+ViewMinimizer,2,34,orders,31.55,31.55,Tid Range Scan,15.09,409
+ViewMinimizer,2,35,orders,19.66,19.66,Tid Range Scan,10.25,225
+ViewMinimizer,2,36,orders,16.57,16.57,Tid Range Scan,7.13,112
+ViewMinimizer,2,37,orders,15.08,15.08,Tid Range Scan,5.57,56
+ViewMinimizer,2,38,orders,11.38,11.38,,,
+ViewMinimizer,2,39,orders,10.94,10.94,,,
+ViewMinimizer,2,40,orders,10.72,10.72,,,
+ViewMinimizer,2,41,orders,10.61,10.61,,,
+ViewMinimizer,2,42,orders,10.55,10.55,,,
+ViewMinimizer,2,43,orders,10.54,10.54,,,
+ViewMinimizer,2,44,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,45,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,46,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,47,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,48,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,49,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,50,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,51,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,52,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,53,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,2,54,customer,9.14,9.14,Tid Range Scan,7.04,3
+ViewMinimizer,2,55,customer,7.62,7.62,Tid Range Scan,5.52,2
+ViewMinimizer,2,56,customer,3.78,3.78,,,
+ViewMinimizer,2,57,customer,3.43,3.43,,,
+ViewMinimizer,2,58,customer,3.26,3.26,,,
+ViewMinimizer,2,59,customer,3.17,3.17,,,
+ViewMinimizer,2,60,customer,3.12,3.12,,,
+ViewMinimizer,3,1,lineitem,5490866790.41,480368.62,Index Scan,675.89,15003
+ViewMinimizer,3,2,lineitem,4646977009.16,469549.52,Index Scan,675.89,7502
+ViewMinimizer,3,3,lineitem,7375659764.48,378257.3,Index Scan,675.89,3751
+ViewMinimizer,3,4,lineitem,5111897749.65,298575.32,Index Scan,675.89,1875
+ViewMinimizer,3,5,lineitem,4439185593.82,276100.18,Index Scan,675.89,938
+ViewMinimizer,3,6,lineitem,4116070653.24,265362.97,Index Scan,675.89,469
+ViewMinimizer,3,7,lineitem,3961129659.63,260244.59,Index Scan,675.89,235
+ViewMinimizer,3,8,lineitem,2061429414.04,188767.9,Tid Range Scan,671.02,23502
+ViewMinimizer,3,9,lineitem,1038129777.34,150252.33,Tid Range Scan,337.57,11756
+ViewMinimizer,3,10,lineitem,527392047.35,131029.03,Tid Range Scan,170.84,5884
+ViewMinimizer,3,11,lineitem,3426226.49,43523.1,Tid Range Scan,87.48,2947
+ViewMinimizer,3,12,lineitem,1745434.16,43523.89,Tid Range Scan,45.8,1479
+ViewMinimizer,3,13,lineitem,935951.77,43525.33,Tid Range Scan,25.73,772
+ViewMinimizer,3,14,lineitem,500869.28,43528.26,Tid Range Scan,14.92,392
+ViewMinimizer,3,15,lineitem,314241.77,43532.49,Tid Range Scan,10.29,229
+ViewMinimizer,3,16,lineitem,48844.65,42970.11,Tid Range Scan,7.2,120
+ViewMinimizer,3,17,lineitem,45158.25,41982.19,Tid Range Scan,5.66,65
+ViewMinimizer,3,18,lineitem,42178.94,41210.55,,,
+ViewMinimizer,3,19,lineitem,20303.36,20296.39,,,
+ViewMinimizer,3,20,lineitem,20303.15,20296.18,,,
+ViewMinimizer,3,21,lineitem,20303.05,20296.07,,,
+ViewMinimizer,3,22,lineitem,20302.99,20296.01,,,
+ViewMinimizer,3,23,lineitem,20302.96,20295.98,,,
+ViewMinimizer,3,24,orders,18600.66,18598.44,Bitmap Heap Scan,16781.7,3750
+ViewMinimizer,3,25,orders,12780.0,12780.0,Tid Range Scan,10423.49,375048
+ViewMinimizer,3,26,orders,6434.11,6434.11,Tid Range Scan,5214.66,187566
+ViewMinimizer,3,27,orders,3261.07,3261.07,Tid Range Scan,2610.25,93825
+ViewMinimizer,3,28,orders,1674.08,1674.08,Tid Range Scan,1307.26,46926
+ViewMinimizer,3,29,orders,879.69,879.69,Tid Range Scan,655.77,23476
+ViewMinimizer,3,30,orders,484.46,484.46,Tid Range Scan,330.8,11780
+ViewMinimizer,3,31,orders,275.36,275.36,Tid Range Scan,166.49,5848
+ViewMinimizer,3,32,orders,155.49,155.49,Tid Range Scan,85.25,2924
+ViewMinimizer,3,33,orders,85.64,85.64,Tid Range Scan,44.63,1462
+ViewMinimizer,3,34,orders,53.03,53.03,Tid Range Scan,24.32,731
+ViewMinimizer,3,35,orders,31.41,31.41,Tid Range Scan,14.94,394
+ViewMinimizer,3,36,orders,19.66,19.66,Tid Range Scan,10.25,225
+ViewMinimizer,3,37,orders,16.57,16.57,Tid Range Scan,7.13,112
+ViewMinimizer,3,38,orders,15.08,15.08,Tid Range Scan,5.57,56
+ViewMinimizer,3,39,orders,11.36,11.36,,,
+ViewMinimizer,3,40,orders,10.94,10.94,,,
+ViewMinimizer,3,41,orders,10.73,10.73,,,
+ViewMinimizer,3,42,orders,10.61,10.61,,,
+ViewMinimizer,3,43,orders,10.55,10.55,,,
+ViewMinimizer,3,44,orders,10.54,10.54,,,
+ViewMinimizer,3,45,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,46,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,47,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,48,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,49,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,50,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,51,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,52,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,53,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,54,customer,10.52,10.52,Index Scan,8.45,1
+ViewMinimizer,3,55,customer,9.16,9.16,Tid Range Scan,7.04,4
+ViewMinimizer,3,56,customer,3.82,3.82,,,
+ViewMinimizer,3,57,customer,3.45,3.45,,,
+ViewMinimizer,3,58,customer,3.27,3.27,,,
+ViewMinimizer,3,59,customer,3.19,3.19,,,
+ViewMinimizer,3,60,customer,3.13,3.13,,,
+PKViewMinimizer,1,1,lineitem,2255844853.41,438891.98,Index Scan,200.79,10002
+PKViewMinimizer,1,2,lineitem,2396497978.41,440695.22,Index Scan,225.8,10002
+PKViewMinimizer,1,3,lineitem,2537151103.41,442498.47,Index Scan,250.8,10002
+PKViewMinimizer,1,4,lineitem,2677804228.41,444301.71,Index Scan,275.81,10002
+PKViewMinimizer,1,5,lineitem,2818457353.41,446104.96,Index Scan,300.81,10002
+PKViewMinimizer,1,6,lineitem,2959110478.41,447908.2,Index Scan,325.82,10002
+PKViewMinimizer,1,7,lineitem,3099763603.41,449711.45,Index Scan,350.82,10002
+PKViewMinimizer,1,8,lineitem,3240416728.41,451514.69,Index Scan,375.83,10002
+PKViewMinimizer,1,9,lineitem,3381069853.41,453317.94,Index Scan,400.83,10002
+PKViewMinimizer,1,10,lineitem,3521722978.41,455121.18,Index Scan,425.84,10002
+PKViewMinimizer,1,11,lineitem,42530212.73,42689.35,Index Scan,450.84,10002
+PKViewMinimizer,1,12,lineitem,44045765.78,42689.98,Index Scan,475.85,10002
+PKViewMinimizer,1,13,lineitem,45561318.83,42690.6,Index Scan,500.85,10002
+PKViewMinimizer,1,14,lineitem,47076871.88,42691.23,Index Scan,525.86,10002
+PKViewMinimizer,1,15,lineitem,48592424.93,42691.86,Index Scan,550.86,10002
+PKViewMinimizer,1,16,lineitem,50107977.98,42692.48,Index Scan,575.87,10002
+PKViewMinimizer,1,17,lineitem,51623531.03,42693.11,Index Scan,600.87,10002
+PKViewMinimizer,1,18,lineitem,53139084.08,42693.73,Index Scan,625.88,10002
+PKViewMinimizer,1,19,lineitem,981780.44,42682.16,Index Scan,10.5,150
+PKViewMinimizer,1,20,lineitem,1004509.19,42682.41,Index Scan,10.88,150
+PKViewMinimizer,1,21,lineitem,1027237.94,42682.66,Index Scan,11.25,150
+PKViewMinimizer,1,22,lineitem,1049966.69,42682.91,Index Scan,11.63,150
+PKViewMinimizer,1,23,lineitem,1072695.44,42683.16,Index Scan,12.0,150
+PKViewMinimizer,1,24,orders,123052.34,41614.74,Seq Scan,34485.5,208333
+PKViewMinimizer,1,25,orders,124614.84,43177.24,Seq Scan,36048.0,208333
+PKViewMinimizer,1,26,orders,126177.34,44739.74,Seq Scan,37610.5,208333
+PKViewMinimizer,1,27,orders,127739.84,46302.24,Seq Scan,39173.0,208333
+PKViewMinimizer,1,28,orders,129302.34,47864.74,Seq Scan,40735.5,208333
+PKViewMinimizer,1,29,orders,130864.84,49427.24,Seq Scan,42298.0,208333
+PKViewMinimizer,1,30,orders,132427.34,50989.74,Seq Scan,43860.5,208333
+PKViewMinimizer,1,31,orders,133989.84,52552.24,Seq Scan,45423.0,208333
+PKViewMinimizer,1,32,orders,135552.34,54114.74,Seq Scan,46985.5,208333
+PKViewMinimizer,1,33,orders,137114.84,55677.24,Seq Scan,48548.0,208333
+PKViewMinimizer,1,34,orders,138677.34,57239.74,Seq Scan,50110.5,208333
+PKViewMinimizer,1,35,orders,140239.84,58802.24,Seq Scan,51673.0,208333
+PKViewMinimizer,1,36,orders,141802.34,60364.74,Seq Scan,53235.5,208333
+PKViewMinimizer,1,37,orders,65622.85,62234.17,Seq Scan,54798.0,208333
+PKViewMinimizer,1,38,orders,67185.35,63796.67,Seq Scan,56360.5,208333
+PKViewMinimizer,1,39,orders,68747.85,65359.17,Seq Scan,57923.0,208333
+PKViewMinimizer,1,40,orders,70310.35,66921.67,Seq Scan,59485.5,208333
+PKViewMinimizer,1,41,orders,71872.85,68484.17,Seq Scan,61048.0,208333
+PKViewMinimizer,1,42,orders,22712.21,22674.17,Bitmap Heap Scan,17168.21,3125
+PKViewMinimizer,1,43,orders,22738.77,22700.73,Bitmap Heap Scan,17194.77,3125
+PKViewMinimizer,1,44,orders,22765.34,22727.29,Bitmap Heap Scan,17221.33,3125
+PKViewMinimizer,1,45,orders,22791.9,22753.85,Bitmap Heap Scan,17247.9,3125
+PKViewMinimizer,1,46,orders,22818.46,22780.42,Bitmap Heap Scan,17274.46,3125
+PKViewMinimizer,1,47,customer,2869.82,2869.82,Index Scan,6.92,1
+PKViewMinimizer,1,48,customer,2885.04,2885.04,Index Scan,6.92,1
+PKViewMinimizer,1,49,customer,2878.18,2878.18,Index Scan,6.93,1
+PKViewMinimizer,1,50,customer,2874.59,2874.59,Index Scan,6.93,1
+PKViewMinimizer,1,51,customer,2875.61,2875.61,Index Scan,6.93,1
+PKViewMinimizer,1,52,customer,2876.64,2876.64,Index Scan,6.93,1
+PKViewMinimizer,1,53,customer,2551.01,2551.01,Bitmap Heap Scan,2513.36,47
+PKViewMinimizer,1,54,customer,1619.04,1619.04,Bitmap Heap Scan,1582.63,24
+PKViewMinimizer,1,55,customer,956.64,956.64,Bitmap Heap Scan,920.88,12
+PKViewMinimizer,1,56,customer,536.62,536.62,Bitmap Heap Scan,501.18,6
+PKViewMinimizer,1,57,customer,302.27,302.27,Bitmap Heap Scan,270.7,3
+PKViewMinimizer,1,58,customer,173.42,173.42,Index Scan,144.13,1
+PKViewMinimizer,1,59,customer,101.87,101.87,Index Scan,72.57,1
+PKViewMinimizer,1,60,customer,67.95,67.95,Index Scan,38.66,1
+PKViewMinimizer,1,61,customer,52.87,52.87,Index Scan,23.58,1
+PKViewMinimizer,1,62,customer,45.33,45.33,Index Scan,16.03,1
+PKViewMinimizer,1,63,customer,37.77,37.77,Index Scan,8.48,1
+PKViewMinimizer,2,1,lineitem,2255844826.41,438894.98,Index Scan,200.79,10002
+PKViewMinimizer,2,2,lineitem,2396497951.41,440698.22,Index Scan,225.8,10002
+PKViewMinimizer,2,3,lineitem,2537151076.41,442501.47,Index Scan,250.8,10002
+PKViewMinimizer,2,4,lineitem,2677804201.41,444304.71,Index Scan,275.81,10002
+PKViewMinimizer,2,5,lineitem,2818457326.41,446107.96,Index Scan,300.81,10002
+PKViewMinimizer,2,6,lineitem,2959110451.41,447911.2,Index Scan,325.82,10002
+PKViewMinimizer,2,7,lineitem,3099763576.41,449714.45,Index Scan,350.82,10002
+PKViewMinimizer,2,8,lineitem,3240416701.41,451517.69,Index Scan,375.83,10002
+PKViewMinimizer,2,9,lineitem,3381069826.41,453320.94,Index Scan,400.83,10002
+PKViewMinimizer,2,10,lineitem,3521722951.41,455124.18,Index Scan,425.84,10002
+PKViewMinimizer,2,11,lineitem,42530215.41,42692.35,Index Scan,450.84,10002
+PKViewMinimizer,2,12,lineitem,44045768.46,42692.98,Index Scan,475.85,10002
+PKViewMinimizer,2,13,lineitem,45561321.51,42693.6,Index Scan,500.85,10002
+PKViewMinimizer,2,14,lineitem,47076874.56,42694.23,Index Scan,525.86,10002
+PKViewMinimizer,2,15,lineitem,48592427.61,42694.86,Index Scan,550.86,10002
+PKViewMinimizer,2,16,lineitem,50107980.66,42695.48,Index Scan,575.87,10002
+PKViewMinimizer,2,17,lineitem,51623533.71,42696.11,Index Scan,600.87,10002
+PKViewMinimizer,2,18,lineitem,53139086.76,42696.73,Index Scan,625.88,10002
+PKViewMinimizer,2,19,lineitem,981783.11,42685.16,Index Scan,10.5,150
+PKViewMinimizer,2,20,lineitem,1004511.86,42685.41,Index Scan,10.88,150
+PKViewMinimizer,2,21,lineitem,1027240.61,42685.66,Index Scan,11.25,150
+PKViewMinimizer,2,22,lineitem,1049969.36,42685.91,Index Scan,11.63,150
+PKViewMinimizer,2,23,lineitem,1072698.11,42686.16,Index Scan,12.0,150
+PKViewMinimizer,2,24,orders,123055.34,41617.74,Seq Scan,34487.5,208333
+PKViewMinimizer,2,25,orders,124617.84,43180.24,Seq Scan,36050.0,208333
+PKViewMinimizer,2,26,orders,126180.34,44742.74,Seq Scan,37612.5,208333
+PKViewMinimizer,2,27,orders,127742.84,46305.24,Seq Scan,39175.0,208333
+PKViewMinimizer,2,28,orders,129305.34,47867.74,Seq Scan,40737.5,208333
+PKViewMinimizer,2,29,orders,130867.84,49430.24,Seq Scan,42300.0,208333
+PKViewMinimizer,2,30,orders,132430.34,50992.74,Seq Scan,43862.5,208333
+PKViewMinimizer,2,31,orders,133992.84,52555.24,Seq Scan,45425.0,208333
+PKViewMinimizer,2,32,orders,135555.34,54117.74,Seq Scan,46987.5,208333
+PKViewMinimizer,2,33,orders,137117.84,55680.24,Seq Scan,48550.0,208333
+PKViewMinimizer,2,34,orders,138680.34,57242.74,Seq Scan,50112.5,208333
+PKViewMinimizer,2,35,orders,140242.84,58805.24,Seq Scan,51675.0,208333
+PKViewMinimizer,2,36,orders,141805.34,60367.74,Seq Scan,53237.5,208333
+PKViewMinimizer,2,37,orders,65625.85,62237.17,Seq Scan,54800.0,208333
+PKViewMinimizer,2,38,orders,67188.35,63799.67,Seq Scan,56362.5,208333
+PKViewMinimizer,2,39,orders,68750.85,65362.17,Seq Scan,57925.0,208333
+PKViewMinimizer,2,40,orders,70313.35,66924.67,Seq Scan,59487.5,208333
+PKViewMinimizer,2,41,orders,71875.85,68487.17,Seq Scan,61050.0,208333
+PKViewMinimizer,2,42,orders,22713.58,22675.53,Bitmap Heap Scan,17168.58,3125
+PKViewMinimizer,2,43,orders,22740.14,22702.1,Bitmap Heap Scan,17195.14,3125
+PKViewMinimizer,2,44,orders,22766.7,22728.66,Bitmap Heap Scan,17221.7,3125
+PKViewMinimizer,2,45,orders,22793.27,22755.22,Bitmap Heap Scan,17248.26,3125
+PKViewMinimizer,2,46,orders,22819.83,22781.78,Bitmap Heap Scan,17274.83,3125
+PKViewMinimizer,2,47,customer,2869.82,2869.82,Index Scan,6.92,1
+PKViewMinimizer,2,48,customer,2885.04,2885.04,Index Scan,6.92,1
+PKViewMinimizer,2,49,customer,2878.18,2878.18,Index Scan,6.93,1
+PKViewMinimizer,2,50,customer,2874.59,2874.59,Index Scan,6.93,1
+PKViewMinimizer,2,51,customer,2875.61,2875.61,Index Scan,6.93,1
+PKViewMinimizer,2,52,customer,2876.64,2876.64,Index Scan,6.93,1
+PKViewMinimizer,2,53,customer,2523.75,2523.75,Bitmap Heap Scan,2486.15,46
+PKViewMinimizer,2,54,customer,1598.06,1598.06,Bitmap Heap Scan,1561.7,23
+PKViewMinimizer,2,55,customer,936.92,936.92,Bitmap Heap Scan,901.15,12
+PKViewMinimizer,2,56,customer,533.46,533.46,Bitmap Heap Scan,498.01,6
+PKViewMinimizer,2,57,customer,302.28,302.28,Bitmap Heap Scan,270.7,3
+PKViewMinimizer,2,58,customer,169.91,169.91,Index Scan,140.62,1
+PKViewMinimizer,2,59,customer,102.0,102.0,Index Scan,72.7,1
+PKViewMinimizer,2,60,customer,68.01,68.01,Index Scan,38.72,1
+PKViewMinimizer,2,61,customer,52.9,52.9,Index Scan,23.61,1
+PKViewMinimizer,2,62,customer,45.34,45.34,Index Scan,16.05,1
+PKViewMinimizer,2,63,customer,37.77,37.77,Index Scan,8.48,1
+PKViewMinimizer,3,1,lineitem,2255844899.41,438892.98,Index Scan,200.79,10002
+PKViewMinimizer,3,2,lineitem,2396498024.41,440696.22,Index Scan,225.8,10002
+PKViewMinimizer,3,3,lineitem,2537151149.41,442499.47,Index Scan,250.8,10002
+PKViewMinimizer,3,4,lineitem,2677804274.41,444302.71,Index Scan,275.81,10002
+PKViewMinimizer,3,5,lineitem,2818457399.41,446105.96,Index Scan,300.81,10002
+PKViewMinimizer,3,6,lineitem,2959110524.41,447909.2,Index Scan,325.82,10002
+PKViewMinimizer,3,7,lineitem,3099763649.41,449712.45,Index Scan,350.82,10002
+PKViewMinimizer,3,8,lineitem,3240416774.41,451515.69,Index Scan,375.83,10002
+PKViewMinimizer,3,9,lineitem,3381069899.41,453318.94,Index Scan,400.83,10002
+PKViewMinimizer,3,10,lineitem,3521723024.41,455122.18,Index Scan,425.84,10002
+PKViewMinimizer,3,11,lineitem,42530214.22,42690.35,Index Scan,450.84,10002
+PKViewMinimizer,3,12,lineitem,44045767.27,42690.98,Index Scan,475.85,10002
+PKViewMinimizer,3,13,lineitem,45561320.32,42691.6,Index Scan,500.85,10002
+PKViewMinimizer,3,14,lineitem,47076873.37,42692.23,Index Scan,525.86,10002
+PKViewMinimizer,3,15,lineitem,48592426.42,42692.86,Index Scan,550.86,10002
+PKViewMinimizer,3,16,lineitem,50107979.47,42693.48,Index Scan,575.87,10002
+PKViewMinimizer,3,17,lineitem,51623532.52,42694.11,Index Scan,600.87,10002
+PKViewMinimizer,3,18,lineitem,53139085.57,42694.73,Index Scan,625.88,10002
+PKViewMinimizer,3,19,lineitem,981781.92,42683.16,Index Scan,10.5,150
+PKViewMinimizer,3,20,lineitem,1004510.67,42683.41,Index Scan,10.88,150
+PKViewMinimizer,3,21,lineitem,1027239.42,42683.66,Index Scan,11.25,150
+PKViewMinimizer,3,22,lineitem,1049968.17,42683.91,Index Scan,11.63,150
+PKViewMinimizer,3,23,lineitem,1072696.92,42684.16,Index Scan,12.0,150
+PKViewMinimizer,3,24,orders,123053.34,41615.74,Seq Scan,34486.5,208333
+PKViewMinimizer,3,25,orders,124615.84,43178.24,Seq Scan,36049.0,208333
+PKViewMinimizer,3,26,orders,126178.34,44740.74,Seq Scan,37611.5,208333
+PKViewMinimizer,3,27,orders,127740.84,46303.24,Seq Scan,39174.0,208333
+PKViewMinimizer,3,28,orders,129303.34,47865.74,Seq Scan,40736.5,208333
+PKViewMinimizer,3,29,orders,130865.84,49428.24,Seq Scan,42299.0,208333
+PKViewMinimizer,3,30,orders,132428.34,50990.74,Seq Scan,43861.5,208333
+PKViewMinimizer,3,31,orders,133990.84,52553.24,Seq Scan,45424.0,208333
+PKViewMinimizer,3,32,orders,135553.34,54115.74,Seq Scan,46986.5,208333
+PKViewMinimizer,3,33,orders,137115.84,55678.24,Seq Scan,48549.0,208333
+PKViewMinimizer,3,34,orders,138678.34,57240.74,Seq Scan,50111.5,208333
+PKViewMinimizer,3,35,orders,140240.84,58803.24,Seq Scan,51674.0,208333
+PKViewMinimizer,3,36,orders,141803.34,60365.74,Seq Scan,53236.5,208333
+PKViewMinimizer,3,37,orders,65623.85,62235.17,Seq Scan,54799.0,208333
+PKViewMinimizer,3,38,orders,67186.35,63797.67,Seq Scan,56361.5,208333
+PKViewMinimizer,3,39,orders,68748.85,65360.17,Seq Scan,57924.0,208333
+PKViewMinimizer,3,40,orders,70311.35,66922.67,Seq Scan,59486.5,208333
+PKViewMinimizer,3,41,orders,71873.85,68485.17,Seq Scan,61049.0,208333
+PKViewMinimizer,3,42,orders,22712.39,22674.35,Bitmap Heap Scan,17168.39,3125
+PKViewMinimizer,3,43,orders,22738.96,22700.91,Bitmap Heap Scan,17194.95,3125
+PKViewMinimizer,3,44,orders,22765.52,22727.47,Bitmap Heap Scan,17221.52,3125
+PKViewMinimizer,3,45,orders,22792.08,22754.04,Bitmap Heap Scan,17248.08,3125
+PKViewMinimizer,3,46,orders,22818.64,22780.6,Bitmap Heap Scan,17274.64,3125
+PKViewMinimizer,3,47,customer,2869.82,2869.82,Index Scan,6.92,1
+PKViewMinimizer,3,48,customer,2885.04,2885.04,Index Scan,6.92,1
+PKViewMinimizer,3,49,customer,2878.18,2878.18,Index Scan,6.93,1
+PKViewMinimizer,3,50,customer,2874.59,2874.59,Index Scan,6.93,1
+PKViewMinimizer,3,51,customer,2875.61,2875.61,Index Scan,6.93,1
+PKViewMinimizer,3,52,customer,2876.64,2876.64,Index Scan,6.93,1
+PKViewMinimizer,3,53,customer,2581.62,2581.62,Bitmap Heap Scan,2543.92,48
+PKViewMinimizer,3,54,customer,1701.97,1701.97,Bitmap Heap Scan,1665.5,25
+PKViewMinimizer,3,55,customer,1004.14,1004.14,Bitmap Heap Scan,968.32,13
+PKViewMinimizer,3,56,customer,571.44,571.44,Bitmap Heap Scan,535.99,6
+PKViewMinimizer,3,57,customer,322.81,322.81,Bitmap Heap Scan,291.23,3
+PKViewMinimizer,3,58,customer,184.25,184.25,Bitmap Heap Scan,154.94,2
+PKViewMinimizer,3,59,customer,106.29,106.29,Index Scan,76.99,1
+PKViewMinimizer,3,60,customer,72.05,72.05,Index Scan,42.76,1
+PKViewMinimizer,3,61,customer,53.02,53.02,Index Scan,23.72,1
+PKViewMinimizer,3,62,customer,45.4,45.4,Index Scan,16.11,1
+PKViewMinimizer,3,63,customer,37.77,37.77,Index Scan,8.48,1

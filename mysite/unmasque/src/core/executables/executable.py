@@ -43,10 +43,8 @@ class Executable(Base):
 
     def doActualJob(self, args=None):
         query = self.extract_params_from_args(args)
-        if self.data_schema is None:
-            f_query = f"set search_path='{self.connectionHelper.config.schema}'; {query}"
-        else:
-            f_query = f"set search_path='{self.data_schema}'; {query}"
+        schema = self.data_schema or self.connectionHelper.config.schema
+        f_query = self.connectionHelper.queries.wrap_query_for_executable(schema, query)
         result = []
         try:
             start_t = time.time()
@@ -93,3 +91,23 @@ class Executable(Base):
 
     def isQ_result_has_some_data(self, Res):
         return not self.isQ_result_empty(Res)
+
+    @staticmethod
+    def _strip_query_terminator(query):
+        return query.rstrip().rstrip(';')
+
+    def is_query_result_no_full_nullfree_row(self, query):
+        """Run <query> as an existence probe instead of fetching every row.
+
+        For the base executable this is exactly the emptiness check, but at
+        most one row is transferred instead of the whole result.
+        """
+        q = self._strip_query_terminator(query)
+        res = self.doJob(
+            self.connectionHelper.queries.select_limited_rows_from_query(q, 1))
+        if not self.done or not isinstance(res, list):
+            raise RuntimeError(
+                f"{self.extractor_name}: probe execution failed "
+                f"(done={self.done}, result_type={type(res).__name__}, "
+                f"result={res!r}); query execution did not complete")
+        return self.isQ_result_empty(res)

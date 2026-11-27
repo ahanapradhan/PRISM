@@ -25,6 +25,9 @@ class Schema:
             return True
         return False
 
+    def is_query_empty(self, QH):
+        return self.isEmpty(self.run_query(QH))
+
 
 class TPCH(Schema):
     ddot = []

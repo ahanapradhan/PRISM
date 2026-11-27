@@ -2,7 +2,6 @@ import threading
 import unittest
 from time import sleep
 
-from mysite.unmasque import views
 from mysite.unmasque.src.core.factory.PipeLineFactory import PipeLineFactory
 from mysite.unmasque.src.pipeline.abstract.generic_pipeline import GenericPipeLine
 from mysite.unmasque.src.util.PostgresConnectionHelper import PostgresConnectionHelper
@@ -74,14 +73,6 @@ def monitor_func_union(factory, token, observed):
             break
 
 
-class MockRequest:
-    session = {
-        'hq': "select o_orderkey as key from customer, orders where c_custkey = o_custkey "
-              "and o_totalprice <= 890 limit 3;",
-        'token': '',
-        'partials': ''}
-
-
 class MyTestCase(unittest.TestCase):
     timeout = EXTRACTION_TIME * NUM_THREADS + 1
     connHelper = PostgresConnectionHelper(Config())
@@ -104,14 +95,15 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(DB_MINIMIZATION + RUNNING in observed)
 
     def test_state_changes(self):
-        req = MockRequest()
-        token = views.func_start(self.connHelper, MockRequest.session['hq'], req)
-        done = (req.session[str(token) + 'partials'] == DONE or req.session[str(token) + 'partials'] == WRONG)
-        while not done:
+        query = ("select o_orderkey as key from customer, orders where c_custkey = o_custkey "
+                 "and o_totalprice <= 890 limit 3;")
+        factory = PipeLineFactory()
+        token = factory.doJobAsync(query, self.connHelper)
+        state = factory.get_pipeline_state(token)
+        while state not in [DONE, WRONG]:
             sleep(1)
-            views.func_check_progress(req, token)
-            done = (req.session[str(token) + 'partials'] == DONE or req.session[str(token) + 'partials'] == WRONG)
-        self.assertTrue(True)
+            state = factory.get_pipeline_state(token)
+        self.assertIn(state, [DONE, WRONG])
 
     def rate_limited_to_1(self):
         factory = MockPipeLineFactory()

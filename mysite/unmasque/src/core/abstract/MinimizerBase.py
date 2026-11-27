@@ -20,23 +20,36 @@ class Minimizer(AppExtractorBase, ABC):
         self.all_relations = list(all_sizes.keys())
         self.all_relations.sort()
         self.error_table = None
+        # Experiment hooks: one "iteration" is one ctid-halving round.  The
+        # marker line lets timing/cost values be recovered from the log after
+        # the run, which is how the comparison plots are produced.
+        self.iteration = 0
+        self.on_iteration = None
+        self._iteration_hooked = False
+        self.repeats = 1
+        self.timing_records = []
+        self._probe_measured = False
 
     def getCoreSizes(self):
         sizes = {}
         for table in self.all_relations:
-            sizes[table] = self.connectionHelper.execute_sql_fetchone_0(
+            count = self.connectionHelper.execute_sql_fetchone_0(
                 self.connectionHelper.queries.get_row_count(self.get_fully_qualified_table_name(table)))
+            if count is not None:
+                sizes[table] = count
         self.logger.debug(sizes)
         return sizes
 
     def extract_params_from_args(self, args):
         return args[0]
 
-    def sanity_check(self, query):
+    def sanity_check(self, query, expect_populated=True):
         # SANITY CHECK
-        new_result = self.app.doJob(query)
-        if self.app.isQ_result_no_full_nullfree_row(new_result):
-            self.logger.error("Error: Query out of extractable domain\n")
+        if self.app.is_query_result_no_full_nullfree_row(query):
+            if expect_populated:
+                self.logger.error("Error: Query out of extractable domain\n")
+            else:
+                self.logger.debug("Falsified OR probe returned no rows, as expected.")
             return False
         return True
 
@@ -48,6 +61,9 @@ class Minimizer(AppExtractorBase, ABC):
                                           start_ctid,
                                           tabname,
                                           dirty_tab):
+        self.iteration += 1
+        self._iteration_hooked = False
+        self.logger.debug(f"MIN_ITER_START: {self.iteration} {tabname}")
         if isinstance(self.app, NullFreeExecutable):
             end_ctid, start_ctid = self.check_sanity_when_nullfree_exe(end_ctid, mid_ctid1, mid_ctid2, query,
                                                                        start_ctid,
@@ -58,6 +74,7 @@ class Minimizer(AppExtractorBase, ABC):
                                                                    tabname, dirty_tab)
         self.connectionHelper.execute_sql([self.connectionHelper.queries.drop_view(
                                                     self.get_fully_qualified_table_name(tabname))])
+        self.logger.debug(f"MIN_ITER_END: {self.iteration}")
         return end_ctid, start_ctid
 
     def check_sanity_when_nullfree_exe(self, end_ctid, mid_ctid1, mid_ctid2, query, start_ctid, tabname, dirty_tab):
@@ -81,7 +98,27 @@ class Minimizer(AppExtractorBase, ABC):
             end_ctid = mid_ctid1
         return end_ctid, start_ctid
 
+    def drop_relation_silently(self, tabname):
+        """Drop a stale relation (table or view) of the given name, if any.
+
+        The minimizer renames the working table to a backup/dirty name and
+        creates views in its place. A crashed previous run can leave the
+        backup name occupied; the rename would then fail silently (DuplicateTable
+        is swallowed by cus_execute_sqls) and every later create-view /
+        create-table on the working name degrades into a full-size no-op.
+        """
+        kind = self.connectionHelper.is_view_or_table(tabname, self.connectionHelper.config.schema)
+        if kind == 'table':
+            fn = self.connectionHelper.queries.drop_table_cascade
+        elif kind == 'view':
+            fn = self.connectionHelper.queries.drop_view
+        else:
+            return
+        self.connectionHelper.execute_sql(
+            [fn(self.get_fully_qualified_table_name(tabname))], self.logger)
+
     def get_start_and_end_ctids(self, core_sizes, query, tabname, dirty_tab):
+        self.drop_relation_silently(dirty_tab)
         self.connectionHelper.execute_sql([self.connectionHelper.queries.alter_table_rename_to(
                                                 self.get_fully_qualified_table_name(tabname), dirty_tab)])
         end_ctid, mid_ctid1, mid_ctid2, start_ctid = self.get_mid_ctids(core_sizes, tabname, dirty_tab)
@@ -120,20 +157,26 @@ class Minimizer(AppExtractorBase, ABC):
         page = int(m_ctid2[0])
         return page, row
 
+    def _notify_iteration(self, view, query):
+        """Expose the candidate relation once it exists (for cost probes)."""
+        if self.on_iteration is not None and not self._iteration_hooked:
+            self._iteration_hooked = True
+            self.on_iteration(self.iteration, view, query)
+
     def check_result_for_half(self, start_ctid, end_ctid, tab, view, query):
         self.connectionHelper.execute_sql(
             [self.connectionHelper.queries.create_view_as_select_star_where_ctid(end_ctid, start_ctid,
                         self.get_fully_qualified_table_name(view), self.get_fully_qualified_table_name(tab))],
             self.logger)
-        new_result = self.app.doJob(query)
+        self._notify_iteration(view, query)
+        works = not self.app.is_query_result_no_full_nullfree_row(query)
         self.connectionHelper.execute_sql([self.connectionHelper.queries.drop_view(
                                                     self.get_fully_qualified_table_name(view))], self.logger)
-        if self.app.isQ_result_nonEmpty_nullfree(new_result):
-            return True  # this half works
-        return False  # this half does not work
+        return works  # this half works / does not work
 
     def update_with_remaining_size(self, core_sizes, end_ctid, start_ctid, tabname, dirty_tab):
         self.logger.debug(start_ctid, end_ctid)
+        self.drop_relation_silently(tabname)
         self.connectionHelper.execute_sql(
             [self.connectionHelper.queries.create_table_as_select_star_from_ctid(end_ctid, start_ctid,
                                                             self.get_fully_qualified_table_name(tabname),

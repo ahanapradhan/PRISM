@@ -31,10 +31,13 @@ def algo(db, QH, strategy="border"):
 
     if len(Partial_QH) <= 1:
         # if part table has only 1 table, we can't partition it!
-        return {frozenset(db.fromtabs)}, construct_pretty_print_string({frozenset(db.fromtabs)}), (0, db.app_calls)
+        return {frozenset(db.fromtabs)}, construct_pretty_print_string({frozenset(db.fromtabs)}), (0, 0)
 
     local_start_time = time.time()
-    local_start_capp_calls = db.app_calls
+    # app_calls on db only reflects the last db.doJob() delta. The search
+    # invokes db.run_query() directly, so measure the shared app counter as a
+    # live counter to attribute the oracle calls to the UNION stage.
+    local_start_capp_calls = get_app_call_count(db)
 
     search = {"none": search_no_pruning, "bfs": search_bfs, "border": search_border}[strategy]
     MaxSide = search(db, QH, Partial_QH)
@@ -53,7 +56,7 @@ def algo(db, QH, strategy="border"):
     prettY_str = construct_pretty_print_string(Partials)
 
     local_end_time = time.time()
-    local_end_capp_calls = db.app_calls
+    local_end_capp_calls = get_app_call_count(db)
 
     return Partials, prettY_str, (local_end_time - local_start_time, local_end_capp_calls - local_start_capp_calls)
 
@@ -78,8 +81,8 @@ def search_no_pruning(db, QH, aux):
     for k in range(1, n):                                   # every nonempty proper subset
         for c in combinations(aux_sorted, k):
             u = frozenset(c)
-            Res = nullify_and_runQuery(QH, db, u)           # always call the oracle
-            if not db.isEmpty(Res):
+            empty = nullify_and_runQuery_is_empty(QH, db, u)   # always call the oracle
+            if not empty:
                 update_max_side(u, max_side)
     return max_side
 
@@ -135,8 +138,8 @@ def search_bfs(db, QH, aux):
         if any(c <= u for c in known_core):                # CORE is upward-closed
             mark_core(u)
             continue
-        Res = nullify_and_runQuery(QH, db, u)
-        if db.isEmpty(Res):
+        empty = nullify_and_runQuery_is_empty(QH, db, u)
+        if empty:
             mark_core(u)
         else:
             mark_side(u)
@@ -165,8 +168,8 @@ def search_border(db, QH, aux):
         if any(c <= u for c in min_core):
             return False
         if u not in cache:
-            Res = nullify_and_runQuery(QH, db, u)
-            cache[u] = not db.isEmpty(Res)
+            empty = nullify_and_runQuery_is_empty(QH, db, u)
+            cache[u] = not empty
         return cache[u]
 
     def grow(u):
@@ -214,6 +217,18 @@ def search_border(db, QH, aux):
 # ----------------------------------------------------------------------
 # helpers (unchanged)
 # ----------------------------------------------------------------------
+def get_app_call_count(db):
+    """Return the live oracle-call counter for a union database object.
+
+    Real UnionFromClause objects expose the shared executable as ``app``;
+    lightweight test doubles only maintain ``app_calls`` directly.
+    """
+    app = getattr(db, 'app', None)
+    if app is not None and hasattr(app, 'method_call_count'):
+        return app.method_call_count
+    return db.app_calls
+
+
 def update_max_side(u, max_side):
     """Maintain the antichain of maximal SIDE sets."""
     if any(u <= s for s in max_side):
@@ -246,9 +261,37 @@ def construct_pretty_print_string(Partials):
 
 def nullify_and_runQuery(QH, db, s):
     db.nullify_except(s)
-    Res = db.run_query(QH)
-    db.revert_nullify()
-    return Res
+    try:
+        return db.run_query(QH)
+    except Exception:
+        # The nullify renames are still uncommitted. Rolling back is both the
+        # fastest and safest restore: the user tables never lose their data.
+        abort = getattr(db, "abort_nullify", None)
+        if abort is not None:
+            abort()
+        else:
+            db.revert_nullify()
+        raise
+    else:
+        db.revert_nullify()
+
+
+def nullify_and_runQuery_is_empty(QH, db, s):
+    """Boolean oracle: same nullify/revert protocol as nullify_and_runQuery,
+    but only transfers at most one row instead of the whole result."""
+    db.nullify_except(s)
+    try:
+        is_empty = db.is_query_empty(QH)
+    except Exception:
+        abort = getattr(db, "abort_nullify", None)
+        if abort is not None:
+            abort()
+        else:
+            db.revert_nullify()
+        raise
+    else:
+        db.revert_nullify()
+        return is_empty
 
 
 def init(db, QH):

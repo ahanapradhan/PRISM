@@ -36,6 +36,8 @@ class DbParser:
         self.comtab_QH = None
         self.fromtab_QH = None
 
+    FROM_BOUNDARY = r'(?:\bWHERE\b|\bGROUP\s+BY\b|\bORDER\s+BY\b|\bHAVING\b|\bLIMIT\b|$)'
+
     def reset(self):
         self.fromtab_QH = set()
         self.comtab_QH = set()
@@ -43,21 +45,35 @@ class DbParser:
         self.fromtabs_qi = []
         self.parttabs_qi = []
 
+    def _tables_in_from(self, sql):
+        """Extract base table names from the FROM clause of a (sub)query."""
+        match = re.search(r'\bFROM\b(.*?)' + self.FROM_BOUNDARY, sql, re.IGNORECASE | re.DOTALL)
+        if match is None:
+            return set()
+        tables = set()
+        for item in match.group(1).split(","):
+            token = item.strip()
+            if not token:
+                continue
+            # Drop an optional alias: "partsupp ps" -> "partsupp".
+            name = token.split()[0].strip("();").lower()
+            if name:
+                tables.add(name)
+        return tables
+
     def parse(self, sql):
         self.reset()
         subqueries = re.findall(r'\((.*?)\)', sql)
         print(len(subqueries))
 
         if not len(subqueries):  # no union case
-            tables = re.findall(r'FROM\s+([^\s,]+)', sql, re.IGNORECASE)
-            self.fromtab_QH = set(tables)
+            self.fromtab_QH = self._tables_in_from(sql)
             return
 
         for subquery in subqueries:
-            match = re.findall(r'FROM\s+(\S+)(,\S+)*(\s+WHERE)*', subquery, re.IGNORECASE)
-            tables = match[0][0].split(",")
-            self.fromtabs_qi.append(set(tables))
-            print(tables)
+            tables = self._tables_in_from(subquery)
+            self.fromtabs_qi.append(tables)
+            print(sorted(tables))
 
         # Find tables present in all subqueries
         self.comtab_QH = set.intersection(*self.fromtabs_qi)

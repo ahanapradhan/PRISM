@@ -11,6 +11,10 @@ class AppExtractorBase(Base, ABC):
         super().__init__(connectionHelper, name, all_sizes)
         exe_factory = ExecutableFactory()
         self.app = exe_factory.create_exe(self.connectionHelper)
+        # Factory/executables may be cached singletons; ensure the app is bound to
+        # this extractor's connection helper (callers may reuse helpers across runs).
+        if self.app is not None and hasattr(self.app, "connectionHelper"):
+            self.app.connectionHelper = self.connectionHelper
         self.app_calls = 0
         self.enabled = True
         self.dirty_name = UNMASQUE + self.extractor_name

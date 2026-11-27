@@ -1,4 +1,5 @@
 import copy
+import re
 
 from .abstract.GenerationPipeLineBase import GenerationPipeLineBase
 from .dataclass.genPipeline_context import GenPipelineContext
@@ -39,7 +40,7 @@ class OuterJoin(GenerationPipeLineBase):
             return False
         self.__create_importance_dict(new_join_graph, query, table_attr_dict)
 
-        set_possible_queries, fp_on = self.__formulateQueries(final_edge_seq, query)
+        set_possible_queries, fp_on = self.__formulateQueries(final_edge_seq, query, new_join_graph)
         self.__remove_semantically_nonEq_queries(new_join_graph, query, set_possible_queries, fp_on)
         self.logger.debug(f"sem eq queries: {self.sem_eq_queries}")
         if not len(self.sem_eq_queries):
@@ -284,23 +285,83 @@ class OuterJoin(GenerationPipeLineBase):
         self.update_with_val(attrib, tabname, val)
         return val, prev
 
-    def __formulateQueries(self, final_edge_seq, query):
+    def __join_key_projection_swaps(self, new_join_graph, projection):
+        """List one-at-a-time join-key projection alternatives.
+
+        Equi-join aliases are indistinguishable on matched rows, so projection
+        extraction can pick either endpoint of a join edge.  Outer rows expose
+        the difference (one side becomes NULL), so candidate generation must
+        try both endpoints.  If more than one projected attribute is a join
+        key, each endpoint is tried independently, not in combinations.
+        """
+        swaps = []
+        seen = set()
+        for edge in new_join_graph:
+            if len(edge) < 2:
+                continue
+            for source, target in ((edge[0], edge[1]), (edge[1], edge[0])):
+                old, new = source[0], target[0]
+                if old not in projection or old == new or new in projection:
+                    continue
+                if (old, new) not in seen:
+                    seen.add((old, new))
+                    swaps.append((old, new))
+        return swaps
+
+    def __projection_variant(self, snapshot, swap):
+        if swap is None:
+            return dict(snapshot)
+
+        old, new = swap
+        variant = dict(snapshot)
+        variant['projected'] = [new if attrib == old else attrib for attrib in snapshot['projected']]
+        variant['groupby'] = [new if attrib == old else attrib for attrib in snapshot['groupby']]
+        variant['aggregated'] = [(new if attrib == old else attrib, agg)
+                                 for attrib, agg in snapshot['aggregated']]
+        variant['orderby'] = re.sub(rf'\b{re.escape(old)}\b', new, snapshot['orderby'])
+        return variant
+
+    def __formulateQueries(self, final_edge_seq, query, new_join_graph):
         fp_on, fp_where = self.__determine_on_and_where_filters(query)
         aoa_on, aoa_where = self.__determine_on_and_where_aoa(query)
+        projection_snapshot = {
+            'projected': list(self.q_gen.global_projected_attributes),
+            'groupby': list(self.q_gen.global_groupby_attributes),
+            'aggregated': list(self.q_gen.global_aggregated_attributes),
+            'orderby': self.q_gen._workingCopy.order_by_op,
+        }
+        swaps = [None] + self.__join_key_projection_swaps(
+            new_join_graph, projection_snapshot['projected'])
         set_possible_queries = []
-        for seq in final_edge_seq:
-            self.q_gen.backup_query_before_new_generation()
-            self.q_gen.clear_from_where_ops()
-            for edge in seq:
-                table1, table2 = edge[0][1], edge[1][1]
-                imp_t1, imp_t2 = self.__determine_join_edge_type(edge, table1, table2)
-                self.q_gen.generate_from_on_clause(edge, fp_on + aoa_on, imp_t1, imp_t2, table1, table2)
-            self.q_gen.generate_where_clause(fp_where + aoa_where)
-            self.q_gen.generate_groupby_select()
-            q_candidate = self.q_gen.write_query()
-            self.logger.debug("+++++++++++++++++++++")
-            if q_candidate.count('OUTER'):
-                set_possible_queries.append(q_candidate)
+
+        try:
+            for swap in swaps:
+                variant = self.__projection_variant(projection_snapshot, swap)
+                self.q_gen.global_projected_attributes = variant['projected']
+                self.q_gen.global_groupby_attributes = variant['groupby']
+                self.q_gen.global_aggregated_attributes = variant['aggregated']
+                self.q_gen._workingCopy.order_by_op = variant['orderby']
+
+                for seq in final_edge_seq:
+                    self.q_gen.backup_query_before_new_generation()
+                    self.q_gen.clear_from_where_ops()
+                    for edge in seq:
+                        table1, table2 = edge[0][1], edge[1][1]
+                        imp_t1, imp_t2 = self.__determine_join_edge_type(edge, table1, table2)
+                        self.q_gen.generate_from_on_clause(edge, fp_on + aoa_on, imp_t1, imp_t2, table1, table2)
+                    self.q_gen.generate_where_clause(fp_where + aoa_where)
+                    self.q_gen.generate_groupby_select()
+                    q_candidate = self.q_gen.write_query()
+                    self.logger.debug("+++++++++++++++++++++")
+                    if swap is not None:
+                        self.logger.debug(f"trying join-key projection {swap[0]} -> {swap[1]}")
+                    if q_candidate.count('OUTER') and q_candidate not in set_possible_queries:
+                        set_possible_queries.append(q_candidate)
+        finally:
+            self.q_gen.global_projected_attributes = projection_snapshot['projected']
+            self.q_gen.global_groupby_attributes = projection_snapshot['groupby']
+            self.q_gen.global_aggregated_attributes = projection_snapshot['aggregated']
+            self.q_gen._workingCopy.order_by_op = projection_snapshot['orderby']
 
         for q in set_possible_queries:
             self.logger.debug(q)

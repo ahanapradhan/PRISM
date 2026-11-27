@@ -3,8 +3,8 @@ import unittest
 
 from mysite.unmasque.src.core.elapsed_time import create_zero_time_profile
 from mysite.unmasque.src.pipeline.ExtractionPipeLine import ExtractionPipeLine
+from mysite.unmasque.test.AoaTestFullPipeline import get_subquery1
 from mysite.unmasque.test.util import tpchSettings
-from mysite.unmasque.test.util.queries import get_subquery1
 from mysite.unmasque.test.util.BaseTestCase import BaseTestCase
 
 

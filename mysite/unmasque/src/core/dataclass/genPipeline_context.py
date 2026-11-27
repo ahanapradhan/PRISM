@@ -137,7 +137,8 @@ class GenPipelineContext:
                  aoa_extractor: InequalityPredicate,
                  filter_extractor: Filter,
                  global_min_instance_dict: dict,
-                 or_predicates):
+                 or_predicates,
+                 cnf=None):
         self.core_relations = core_relations
         self.global_all_attribs = filter_extractor.global_all_attribs
         self.attrib_types_dict = None
@@ -146,20 +147,98 @@ class GenPipelineContext:
         self.__aoa_attribs = None
         self.arithmetic_filters = aoa_extractor.arithmetic_filters
         self.global_min_instance_dict = copy.deepcopy(global_min_instance_dict)
+        self.cnf = cnf
+        self.cnf_route = None
+        self.cnf_pin_values = {}
         self.__or_predicates = or_predicates
+        # Backward-compatible flattening: if legacy slots are absent but CNF is
+        # provided, derive slot-wise alternatives for existing downstream logic.
+        if (not self.__or_predicates) and self.cnf is not None:
+            try:
+                from ..disjunction.model import cnf_to_legacy_or_predicates
+                self.__or_predicates = cnf_to_legacy_or_predicates(self.cnf)
+            except Exception:
+                self.__or_predicates = or_predicates or []
+        if self.__or_predicates is None:
+            self.__or_predicates = []
         self.filter_in_predicates = []
+        self.cross_column_or_predicates = []
+        # B13 (guarded): preselect a default route/pinning map for downstream use.
+        if self.cnf is not None:
+            try:
+                from ..disjunction.routes import has_cnf_routes, route_pin_values, select_route
+                if has_cnf_routes(self.cnf):
+                    self.cnf_route = select_route(self.cnf, route_index=0)
+                    self.cnf_pin_values = route_pin_values(self.cnf_route)
+            except Exception:
+                self.cnf_route = None
+                self.cnf_pin_values = {}
 
         self.__algebraic_eq_predicates = aoa_extractor.algebraic_eq_predicates
         self.global_join_graph = []
         self.global_attrib_types = filter_extractor.global_attrib_types
         self.global_aoa_le_predicates = aoa_extractor.aoa_predicates
         self.global_aoa_l_predicates = aoa_extractor.aoa_less_thans
+        self.cross_column_or_predicates = []
+        self._cross_column_or_constituent_keys = set()
+        self._cross_column_or_constituent_preds = set()
 
         # methods passed by aoa extractor
         self.get_dmin_val = filter_extractor.get_dmin_val
         self.get_datatype = filter_extractor.get_datatype
         self.do_permanent_mutation = aoa_extractor.do_permanent_mutation
         self.restore_dmin_from_dict = aoa_extractor.restore_d_min_from_dict
+        self._absorbed_LBs = aoa_extractor.absorbed_LBs
+        self._absorbed_UBs = aoa_extractor.absorbed_UBs
+
+    # ---- CNF/route-aware helpers (guarded, legacy no-op when CNF absent) ----
+    def has_structured_cnf(self) -> bool:
+        try:
+            from ..disjunction.routes import has_cnf_routes
+            return has_cnf_routes(self.cnf)
+        except Exception:
+            return False
+
+    def set_probe_route(self, route):
+        self.cnf_route = route
+        if route is None or not self.has_structured_cnf():
+            self.cnf_pin_values = {}
+            return self.cnf_pin_values
+        try:
+            from ..disjunction.routes import route_pin_values
+            self.cnf_pin_values = route_pin_values(route) or {}
+        except Exception:
+            self.cnf_pin_values = {}
+        return self.cnf_pin_values
+
+    def get_freeing_route_for_attr(self, attr):
+        if not self.has_structured_cnf():
+            return None
+        try:
+            from ..disjunction.filter_structure import select_freeing_route_for_attr
+            return select_freeing_route_for_attr(self.cnf, attr)
+        except Exception:
+            return None
+
+    def get_attr_domain_under_route(self, attr, route=None):
+        if not self.has_structured_cnf():
+            return None
+        try:
+            from ..disjunction.filter_structure import Domain, attr_domain_under_route
+            route = self.cnf_route if route is None else route
+            return attr_domain_under_route(self.cnf, route, attr, global_domain=Domain(kind='free'))
+        except Exception:
+            return None
+
+    def get_distinct_values_for_attr(self, attr, count=2, route=None, fallback=None):
+        if not self.has_structured_cnf():
+            return list((fallback or [])[:count])
+        try:
+            from ..disjunction.filter_structure import sample_values_from_domain
+            domain = self.get_attr_domain_under_route(attr, route=route)
+            return sample_values_from_domain(domain, count=count, fallback=fallback)
+        except Exception:
+            return list((fallback or [])[:count])
 
     def doJob(self):
         self.restore_dmin_from_dict()
@@ -170,7 +249,8 @@ class GenPipelineContext:
         self.attrib_types_dict = {(entry[0], entry[1]): entry[2] for entry in self.global_attrib_types}
         self.filter_attrib_dict = self.__construct_filter_attribs_dict()
         self.joined_attribs = collect_attribs_from(self.global_join_graph)
-        self.__aoa_attribs = collect_attribs_from(self.global_aoa_le_predicates)
+        self.__aoa_attribs = (collect_attribs_from(self.global_aoa_le_predicates)
+                              + collect_attribs_from(self.global_aoa_l_predicates))
         self.__update_filter_predicates_from_filter_dict()
 
     def __create_equi_join_graph(self):
@@ -188,26 +268,65 @@ class GenPipelineContext:
         update_arithmetic_aoa_commons(LB_dict, UB_dict, filter_attrib_dict)
         update_aoa_LB_UB(LB_dict, UB_dict, filter_attrib_dict)
         self.__update_aoa_single_bounds(LB_dict, UB_dict, filter_attrib_dict)
+        self.__strip_absorbed_bounds(filter_attrib_dict)
         all_keys = list(filter_attrib_dict.keys())
         for entry in all_keys:
             self.__add_for_joined_attribs(entry, filter_attrib_dict)
         return filter_attrib_dict
 
+    def __strip_absorbed_bounds(self, filter_attrib_dict):
+        absorbed_LBs = getattr(self, "_absorbed_LBs", {})
+        absorbed_UBs = getattr(self, "_absorbed_UBs", {})
+        to_del = []
+        for attrib, val in list(filter_attrib_dict.items()):
+            if not isinstance(val, tuple) or len(val) != 2:
+                continue
+            if not isinstance(attrib, tuple) or len(attrib) != 2:
+                continue
+            lb, ub = val[0], val[1]
+            datatype = self.attrib_types_dict.get(attrib)
+            if datatype is None:
+                continue
+            try:
+                i_min, i_max = get_min_and_max_val(datatype)
+            except Exception:
+                continue
+            if attrib in absorbed_LBs and lb in absorbed_LBs[attrib]:
+                lb = i_min
+            if attrib in absorbed_UBs and ub in absorbed_UBs[attrib]:
+                ub = i_max
+            if lb == i_min and ub == i_max:
+                to_del.append(attrib)
+            elif (lb, ub) != val:
+                filter_attrib_dict[attrib] = (lb, ub)
+        for attrib in to_del:
+            del filter_attrib_dict[attrib]
+
     def __update_aoa_single_bounds(self, LB_dict: dict, UB_dict: dict, filter_attrib_dict):
         to_del_LB = []
         for attrib in LB_dict.keys():
+            val = LB_dict[attrib]
+            absorbed = getattr(self, "_absorbed_LBs", {})
+            if attrib in absorbed and val in absorbed[attrib]:
+                to_del_LB.append(attrib)
+                continue
             datatype = self.attrib_types_dict[attrib]
             _, i_max = get_min_and_max_val(datatype)
-            filter_attrib_dict[attrib] = (LB_dict[attrib], i_max)
+            filter_attrib_dict[attrib] = (val, i_max)
             to_del_LB.append(attrib)
         for attrib in to_del_LB:
             del LB_dict[attrib]
 
         to_del_UB = []
         for attrib in UB_dict.keys():
+            val = UB_dict[attrib]
+            absorbed = getattr(self, "_absorbed_UBs", {})
+            if attrib in absorbed and val in absorbed[attrib]:
+                to_del_UB.append(attrib)
+                continue
             datatype = self.attrib_types_dict[attrib]
             i_min, _ = get_min_and_max_val(datatype)
-            filter_attrib_dict[attrib] = (i_min, UB_dict[attrib])
+            filter_attrib_dict[attrib] = (i_min, val)
             to_del_UB.append(attrib)
         for attrib in to_del_UB:
             del UB_dict[attrib]
@@ -220,6 +339,10 @@ class GenPipelineContext:
                 if entry[2].lower() in ['like', 'equal']:
                     filter_attrib_dict[(entry[0], entry[1])] = entry[3]
         for entry in self.filter_in_predicates:
+            if not entry or len(entry) < 4:
+                continue
+            if str(entry[2]).upper() in ('OR_CLAUSE', 'OR') and entry[0] == '__OR_CLAUSE__':
+                continue
             filter_attrib_dict[(entry[0], entry[1])] = entry[3]
 
     def __add_for_joined_attribs(self, entry, filter_attrib_dict):
@@ -246,6 +369,35 @@ class GenPipelineContext:
                                r_dmin_val)
         return LB_dict, UB_dict
 
+    def __is_duplicate_joined_filter(self, key, explicit_keys) -> bool:
+        """True when `key` only repeats an explicit filter through an equi-join.
+
+        `filter_attrib_dict` is intentionally propagated to join-equivalent
+        columns so probe generation uses the same bounds on every side of a
+        join.  Those propagated copies are not standalone query predicates and
+        must not be rendered back into the WHERE clause.
+        """
+        for eq_group in self.__algebraic_eq_predicates:
+            if key not in eq_group:
+                continue
+            for member in eq_group:
+                if not isinstance(member, tuple) or len(member) != 2:
+                    continue
+                peer = (member[0], member[1])
+                if peer == key or peer not in explicit_keys:
+                    continue
+                if self.__same_filter_value(self.filter_attrib_dict.get(key),
+                                            self.filter_attrib_dict.get(peer)):
+                    return True
+            break
+        return False
+
+    @staticmethod
+    def __same_filter_value(left, right) -> bool:
+        if isinstance(left, tuple) and isinstance(right, tuple):
+            return len(left) == len(right) and all(a == b for a, b in zip(left, right))
+        return left == right
+
     def __update_filter_predicates_from_filter_dict(self):
         filter_dict = []
         for pred in self.arithmetic_filters:
@@ -253,13 +405,38 @@ class GenPipelineContext:
             filter_dict.append(key)
 
         to_add = set()
-        for key in self.filter_attrib_dict.keys():
+        cross_keys = getattr(self, '_cross_column_or_constituent_keys', set()) or set()
+        aoa_keys = set(getattr(self, '_GenPipelineContext__aoa_attribs', None) or [])
+        for key in list(self.filter_attrib_dict.keys()):
+            if not isinstance(key, tuple) or len(key) != 2:
+                continue
             if key in filter_dict:
                 continue
-            if len(self.filter_attrib_dict[key]) > 2 or any(isinstance(v, tuple) for v in self.filter_attrib_dict[key]):
+            if self.__is_duplicate_joined_filter(key, filter_dict):
                 continue
-            bounds = self.filter_attrib_dict[key]
-            datatype = self.get_datatype((key[0], key[1]))
+            # Do not synthesize standalone conjuncts for attributes participating in
+            # discovered cross-column OR clauses (disjunctive, not standalone).
+            if key in cross_keys:
+                continue
+            # Do not synthesize filters for purely AOA-implied bounds (no concrete filter).
+            if key in aoa_keys:
+                continue
+            val = self.filter_attrib_dict[key]
+            try:
+                if val is None:
+                    continue
+                # skip complex/IN-like or clause payloads not representable as simple bounds
+                if isinstance(val, (list, FrozenList)):
+                    continue
+                if isinstance(val, tuple) and (len(val) > 2 or any(isinstance(v, tuple) for v in val)):
+                    continue
+            except Exception:
+                continue
+            bounds = val
+            try:
+                datatype = self.get_datatype((key[0], key[1]))
+            except Exception:
+                continue
             i_min, i_max = get_min_and_max_val(datatype)
             if not isinstance(bounds, tuple):  # single value
                 op = '='
@@ -292,11 +469,25 @@ class GenPipelineContext:
         return LB_dict, UB_dict
 
     def __generate_arithmetic_conjunctive_disjunctions(self):
+        self.cross_column_or_predicates = getattr(self, 'cross_column_or_predicates', [])
+        self._cross_column_or_constituent_keys = getattr(self, '_cross_column_or_constituent_keys', set())
+        self._cross_column_or_constituent_preds = getattr(self, '_cross_column_or_constituent_preds', set())
         for p in self.__or_predicates:
             non_empty_indices = [i for i, t_a in enumerate(p) if t_a]
             if len(non_empty_indices) == 1:
-                if p[non_empty_indices[0]] not in self.arithmetic_filters:
-                    self.arithmetic_filters.append(p[non_empty_indices[0]])
+                single_pred = p[non_empty_indices[0]]
+                single_key = (single_pred[0], single_pred[1])
+                # A slot whose sibling alternatives are empty is an incomplete
+                # disjunct, not a new standalone conjunct. If AOA already
+                # accepted a concrete bound for this column, emitting the
+                # discovered alternative as well narrows the result using only
+                # one branch of the disjunction. Keep the accepted bound.
+                if len(p) > 1 and any(
+                        (pred[0], pred[1]) == single_key
+                        for pred in self.arithmetic_filters):
+                    continue
+                if single_pred not in self.arithmetic_filters:
+                    self.arithmetic_filters.append(single_pred)
                 continue
             tab_attribs = [(p[i][0], p[i][1]) for i in non_empty_indices]
             uniq_tab_attribs = set(tab_attribs)
@@ -319,14 +510,33 @@ class GenPipelineContext:
                         values.append((i_min, i_max))
                 self.__adjust_for_in_predicates(attrib, tab, values)
             else:
-                details = {
-                    "column": p,
-                    "tab_attribs": tab_attribs,
-                    "unique_tab_attribs": sorted(uniq_tab_attribs),
-                }
-                raise UnmasqueError(
-                    ERROR_007, "genPipeline_context",
-                    f"Disjunction on Multiple Attributes are out of scope! Details: {details}")
+                # Cross-column/attribute OR clause (e.g. t.a = 1 OR t.b > 5).
+                # Keep as a structured clause for CNF-native/WHERE rendering instead
+                # of lossy single-attribute IN flattening.
+                clause_preds = [p[i] for i in non_empty_indices if p[i]]
+                if not clause_preds:
+                    continue
+                if len(clause_preds) == 1:
+                    if clause_preds[0] not in self.arithmetic_filters:
+                        self.arithmetic_filters.append(clause_preds[0])
+                    continue
+                or_pred = ('__OR_CLAUSE__', '__OR_CLAUSE__', 'OR_CLAUSE', tuple(clause_preds), tuple(clause_preds))
+                if or_pred not in self.filter_in_predicates and or_pred not in self.cross_column_or_predicates:
+                    self.cross_column_or_predicates.append(or_pred)
+                    self.filter_in_predicates.append(or_pred)
+                # Remove constituent predicates if they were present as standalone conjuncts;
+                # the OR clause subsumes their independent conjunction.
+                for cp in clause_preds:
+                    try:
+                        self._cross_column_or_constituent_preds.add(tuple(cp) if not isinstance(cp, tuple) else cp)
+                        self._cross_column_or_constituent_keys.add((cp[0], cp[1]))
+                    except Exception:
+                        pass
+                    try:
+                        while cp in self.arithmetic_filters:
+                            self.arithmetic_filters.remove(cp)
+                    except Exception:
+                        pass
 
     def __adjust_for_in_predicates(self, attrib, tab, _values):
         values = []

@@ -1,0 +1,13 @@
+minimizer,run,total_wallclock_s,iterations
+CopyBasedMinimizer,1,873.6632,62
+CopyBasedMinimizer,2,867.2286,61
+CopyBasedMinimizer,3,880.7367,61
+ViewMinimizer,1,866.3093,61
+ViewMinimizer,2,862.1704,62
+ViewMinimizer,3,862.9346,58
+PKViewMinimizer,1,863.4448,64
+PKViewMinimizer,2,862.0261,64
+PKViewMinimizer,3,860.7487,64
+HybridMinimizer,1,868.1555,60
+HybridMinimizer,2,863.984,61
+HybridMinimizer,3,864.6736,60
