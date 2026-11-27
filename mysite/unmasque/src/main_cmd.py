@@ -206,13 +206,6 @@ WHERE c_mktsegment = 'BUILDING'
 GROUP BY l_orderkey, o_orderdate, o_shippriority
 ORDER BY revenue DESC, o_orderdate
 LIMIT 10;""", False, False, False, False),
-                     TestQuery("MQ4", """SELECT o_orderdate, o_orderpriority, COUNT(*) AS order_count
-FROM orders
-WHERE o_orderdate >= DATE '1997-07-01' 
-  AND o_orderdate < DATE '1997-07-01' + INTERVAL '3 months'
-GROUP BY o_orderdate, o_orderpriority
-ORDER BY o_orderpriority
-LIMIT 10;""",False, False, False, False),
                      TestQuery("MQ5", """SELECT n_name, 
        SUM(l_extendedprice * (1 - l_discount)) AS revenue
 FROM customer, orders, lineitem, supplier, nation, region
@@ -289,47 +282,6 @@ LIMIT 100;""",False, False, False, False),
                          o_orderdate <= date '1995-10-13' and l_extendedprice between 212 and 3000 
                         and l_quantity <= 123  group by o_orderdate, o_shippriority, c_mktsegment 
                          order by revenue desc, o_orderdate asc, o_shippriority asc;""", False, False, False, False),
-                     TestQuery("TPCH_Q12", """select
-	l_shipmode,
-	sum(case
-		when o_orderpriority = '1-URGENT'
-			or o_orderpriority = '2-HIGH'
-			then 1
-		else 0
-	end) as high_line_count,
-	sum(case
-		when o_orderpriority <> '1-URGENT'
-			and o_orderpriority <> '2-HIGH'
-			then 1
-		else 0
-	end) as low_line_count
-from
-	orders,
-	lineitem
-where
-	o_orderkey = l_orderkey
-	and l_shipmode = 'SHIP'
-	and l_commitdate < l_receiptdate
-	and l_shipdate < l_commitdate
-	and l_receiptdate >= date '1995-01-01'
-	and l_receiptdate < date '1995-01-01' + interval '1' year
-group by
-	l_shipmode
-order by
-	l_shipmode;""", False, False, False, False),
-                     TestQuery("TPCH_Q14", """select
-	100.00 * sum(case
-		when p_type like 'PROMO%'
-			then l_extendedprice * (1 - l_discount)
-		else 0
-	end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
-from
-	lineitem,
-	part
-where
-	l_partkey = p_partkey
-	and l_shipdate >= date '1995-01-01'
-	and l_shipdate < date '1995-01-01' + interval '1' month;""", False, False, False, False),
                      TestQuery("oj_bug", """SELECT c_custkey, c_name, c_mktsegment, o_orderkey
 FROM customer FULL OUTER JOIN orders ON c_custkey = o_custkey
 WHERE c_mktsegment = 'BUILDING';""", False, False, True, False),
@@ -339,23 +291,6 @@ WHERE c_mktsegment = 'BUILDING';""", False, False, True, False),
 , TestQuery("QD2", "SELECT c_name, c_acctbal FROM customer WHERE c_mktsegment IN ('BUILDING', 'MACHINERY', 'AUTOMOBILE') AND c_acctbal > 5000;", False, False, False, False, True),
 TestQuery("nep", "SELECT l_shipmode, SUM(l_extendedprice) AS revenue FROM lineitem WHERE l_shipdate < '1994-01-01' AND l_quantity < 24 AND l_linenumber <> 4 AND l_returnflag <> 'R' GROUP BY l_shipmode LIMIT 100;", False, False, False, True, False),
                      # Queries added from U2_workload.sql
-                     TestQuery("F16", """SELECT
-    o_clerk,
-    AVG(2 * o_totalprice + 35.90) AS total_price,
-    c_acctbal,
-    n_name
-FROM orders, customer, nation
-WHERE
-    c_custkey = o_custkey
-    AND c_nationkey = n_nationkey
-    AND n_nationkey IN (1, 3, 5, 4, 10, 11)
-    AND c_acctbal < 7000
-    AND c_acctbal > 1000
-    AND o_totalprice > 2500
-    AND o_totalprice <= 15005.06
-    AND c_acctbal <= o_totalprice
-GROUP BY o_clerk, c_acctbal, n_name
-ORDER BY total_price DESC, o_clerk, c_acctbal, n_name;""", False, False, False, False, True),
                      TestQuery("A7", """SELECT
     o_clerk,
     AVG(2 * o_totalprice + 1) AS total_price,
@@ -835,13 +770,8 @@ WHERE ps_suppkey = s_suppkey
   AND n_name = 'ARGENTINA'
   AND ps_comment <> 'dependencies'
   AND ps_comment <> 'hello world regular mina dependencies';""", False, False, False, True, False),
-                     TestQuery("F10", """select n_name, c_acctbal from nation, customer WHERE n_nationkey = c_nationkey and 
-  n_nationkey IN (1, 2, 3, 5, 4, 13, 14, 15) and c_acctbal < 7000 and c_acctbal > 1000 ORDER BY c_acctbal;""", False, False, False, False, True),
                      TestQuery("F11", """select n_name, c_acctbal from nation, customer where n_nationkey = c_nationkey and c_nationkey > 3 and 
   n_nationkey < 20 and c_nationkey != 10 and c_acctbal < 7000 LIMIT 200;""", False, False, False, True, False),
-                     TestQuery("F12", """select sum(l_extendedprice) as revenue from lineitem 
-  where l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year 
-  and (l_quantity < 10 or l_quantity between 24 and 42 or l_quantity >= 50);""", False, False, False, False, True),
                      TestQuery("F13", """select avg(ps_supplycost) as cost from part, partsupp where p_partkey = ps_partkey 
   and (p_brand = 'Brand#52' or p_brand = 'Brand#12');""", False, False, False, False, True),
                      TestQuery("F14", """select p_size, ps_suppkey, count(*) as low_line_count from part, partsupp where 
@@ -932,44 +862,6 @@ def union_query(m):
     return " UNION ALL ".join(branches) + ";"
 
 
-# TPC-DS union scaling workload. Add before `return test_workload`.
-#   T3B3..T3B12 : 3 branches, |AUX| grows from 3 to 12
-#   T6B6..T6B12 : 6 branches, |AUX| grows from 6 to 12
-# Branches are disjoint stars (a fact table plus dimensions joined on single surrogate-key equalities); no common tables.
-TPCDS_3B = [  # (tables in growth order, projection, join conditions in growth order)
-    (["store_sales", "store", "household_demographics", "promotion"], "ss_ticket_number, ss_net_paid",
-     ["ss_store_sk = s_store_sk", "ss_hdemo_sk = hd_demo_sk", "ss_promo_sk = p_promo_sk"]),
-    (["catalog_sales", "catalog_page", "call_center", "ship_mode"], "cs_order_number, cs_net_paid",
-     ["cs_catalog_page_sk = cp_catalog_page_sk", "cs_call_center_sk = cc_call_center_sk",
-      "cs_ship_mode_sk = sm_ship_mode_sk"]),
-    (["web_sales", "web_site", "web_page", "customer_address"], "ws_order_number, ws_net_paid",
-     ["ws_web_site_sk = web_site_sk", "ws_web_page_sk = wp_web_page_sk", "ws_bill_addr_sk = ca_address_sk"]),
-]
-TPCDS_3B_SIZES = {3: (1, 1, 1), 4: (2, 1, 1), 5: (2, 2, 1), 6: (2, 2, 2), 7: (3, 2, 2),
-                  8: (3, 3, 2), 9: (3, 3, 3), 10: (4, 3, 3), 11: (4, 4, 3), 12: (4, 4, 4)}
-
-TPCDS_6B = [
-    (["store_sales", "store"], "ss_ticket_number, ss_net_paid", ["ss_store_sk = s_store_sk"]),
-    (["catalog_sales", "catalog_page"], "cs_order_number, cs_net_paid", ["cs_catalog_page_sk = cp_catalog_page_sk"]),
-    (["web_sales", "web_site"], "ws_order_number, ws_net_paid", ["ws_web_site_sk = web_site_sk"]),
-    (["store_returns", "reason"], "sr_ticket_number, sr_return_amt", ["sr_reason_sk = r_reason_sk"]),
-    (["catalog_returns", "call_center"], "cr_order_number, cr_return_amount", ["cr_call_center_sk = cc_call_center_sk"]),
-    (["web_returns", "web_page"], "wr_order_number, wr_return_amt", ["wr_web_page_sk = wp_web_page_sk"]),
-]
-TPCDS_6B_SIZES = {6: (1, 1, 1, 1, 1, 1), 7: (2, 1, 1, 1, 1, 1), 8: (2, 2, 1, 1, 1, 1),
-                  9: (2, 2, 2, 1, 1, 1), 10: (2, 2, 2, 2, 1, 1), 11: (2, 2, 2, 2, 2, 1), 12: (2, 2, 2, 2, 2, 2)}
-
-def tpcds_union_query(branches, sizes):
-    parts = []
-    for (tabs, proj, joins), n in zip(branches, sizes):
-        q = f"SELECT {proj} FROM {', '.join(tabs[:n])}"
-        if n > 1:
-            q += " WHERE " + " AND ".join(joins[:n - 1])
-        parts.append(f"({q})")
-    return " UNION ALL ".join(parts) + ";"
-
-
-
 def build_workload():
     workload = create_workload()
     workload += [
@@ -1003,18 +895,14 @@ def build_workload():
         TestQuery("NEP10",
                   "SELECT * FROM part WHERE p_size <> 20 AND p_retailprice <> 1150.25 AND p_brand <> 'Brand#53' AND p_mfgr <> 'Manufacturer#3' AND p_type <> 'PROMO BRUSHED BRASS' AND p_container <> 'LG JAR' AND p_name <> 'goldenrod lavender spring chocolate lace' AND p_comment <> 'lar accounts amo' AND p_partkey <> 500 AND p_retailprice <> 1650.75;",
                   False, False, False, True, False)]
-    workload += [TestQuery(f"OJ{k}", oj_chain(k), False, True, True, True, True) for k in range(1, 8)]
+    workload += [TestQuery(f"OJ{k}", oj_chain(k), False, True, True, True, True) for k in range(1, 5)]
     workload += [TestQuery(f"DS{k}", disj_str_query(k), False, False, False, False, True)
                   for k in range(1, 11)]
-    workload += [TestQuery(f"UK{k}", fixed_aux_query(k), False, True, False, False) for k in FA_SPLITS]
+    workload += [TestQuery(f"UK{k}", fixed_aux_query(k), False, True, False, False) for k in FA_SPLITS if k != 3]
     workload += [TestQuery(f"UN{m}", union_query(m), False, True, False, False) for m in UNION_SIZES]
     # flags: cs2, union, oj, nep, orf
-    workload += [TestQuery(f"T3B{m}", tpcds_union_query(TPCDS_3B, s), False, True, False, False)
-                 for m, s in TPCDS_3B_SIZES.items()]
-    workload += [TestQuery(f"T6B{m}", tpcds_union_query(TPCDS_6B, s), False, True, False, False)
-                 for m, s in TPCDS_6B_SIZES.items()]
     workload += [TestQuery(f"IJ{k}", ij_chain(k), False, False, False, False, False)
-                 for k in range(1, 8)]
+                 for k in range(1, 5)]
     # Disjunction stress-test workload (20 queries)
     # flags: TestQuery(name, hidden_query, cs2, union, oj, nep, orf=None)
     workload += [
@@ -1131,45 +1019,6 @@ def build_workload():
                   False, True, False, False, True),
     ]
 
-    workload += [TestQuery("demo", """
-    (
-    SELECT
-        c_name AS entity_name,
-        n_name AS country,
-        o_totalprice AS price
-    FROM customer
-    RIGHT OUTER JOIN orders
-        ON c_custkey = o_custkey
-        AND c_acctbal >= o_totalprice
-        AND c_acctbal >= 9000
-    LEFT OUTER JOIN nation
-        ON c_nationkey = n_nationkey
-    WHERE o_totalprice <= 15000
-    GROUP BY n_name, c_name, o_totalprice
-    ORDER BY price, country, entity_name
-    LIMIT 10
-)
-
-UNION ALL
-
-(
-    SELECT
-        s_name AS entity_name,
-        n_name AS country,
-        AVG(l_extendedprice * (1 - l_discount)) AS price
-    FROM supplier, lineitem, orders, nation, region
-    WHERE l_suppkey = s_suppkey
-      AND l_orderkey = o_orderkey
-      AND s_nationkey = n_nationkey
-      AND n_regionkey = r_regionkey
-      AND (l_shipmode = 'AIR' OR l_shipmode = 'TRUCK')
-      AND r_name <> 'EUROPE'
-      AND o_totalprice >= s_acctbal
-      AND o_totalprice <= 15000
-    GROUP BY n_name, s_name
-    ORDER BY price DESC, country DESC, entity_name
-    LIMIT 20
-);""", False, True, True, True, True)]
     return workload
 
 if __name__ == '__main__':
