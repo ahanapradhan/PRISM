@@ -123,6 +123,10 @@ The entry point is `mysite/unmasque/src/main_cmd.py`. It ships with one default 
 
 PRISM has been tested on the queries given in [SQL_workload.sql](SQL_workload.sql), which contains every query defined in `main_cmd.py`.
 
+### Per-query timings
+
+![PRISM pipeline stage timings per query](mysite/unmasque/test/extractions/timings_per_query.png)
+
 ### Command line
 
 From the `mysite` directory:
